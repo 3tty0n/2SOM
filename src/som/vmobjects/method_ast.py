@@ -96,7 +96,6 @@ class AstMethod(AbstractMethod):
         "_size_inner",
         "_embedded_block_methods",
         "source_section",
-        "_lexical_scope",
     ]
 
     def __init__(
@@ -110,7 +109,7 @@ class AstMethod(AbstractMethod):
         source_section,
         lexical_scope,
     ):
-        AbstractMethod.__init__(self, signature)
+        AbstractMethod.__init__(self, signature, lexical_scope)
 
         assert isinstance(arg_inner_access, list)
         make_sure_not_resized(arg_inner_access)
@@ -123,8 +122,6 @@ class AstMethod(AbstractMethod):
         self.source_section = source_section
 
         self.invokable = _Invokable(expr_or_sequence)
-
-        self._lexical_scope = lexical_scope
 
     def set_holder(self, value):
         self._holder = value
