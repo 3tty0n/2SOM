@@ -14,6 +14,10 @@ from som.interpreter.ast.nodes.global_read_node import _UninitializedGlobalReadN
 from som.interpreter.ast.nodes.literal_node import LiteralNode
 from som.interpreter.ast.nodes.return_non_local_node import ReturnLocalNode
 from som.interpreter.ast.nodes.sequence_node import SequenceNode
+from som.interpreter.ast.nodes.specialized.literal_and_or import (
+    AndInlinedNode,
+    OrInlinedNode,
+)
 from som.interpreter.ast.nodes.specialized.literal_if import (
     IfInlinedNode,
     IfElseInlinedNode,
@@ -505,3 +509,23 @@ def test_to_do_block_block_inlined_self(cgenc, mgenc):
     assert read_l2_node._context_level == 2
     assert read_l2_node.var._name == "l2"
     assert read_l2_node.var.idx == 1
+
+
+@pytest.mark.parametrize("and_sel", ["and:", "&&"])
+def test_inlining_of_and(mgenc, and_sel):
+    ast = parse_method(
+        mgenc, "test = ( true AND_SEL [ #val ] )".replace("AND_SEL", and_sel)
+    )
+
+    assert isinstance(ast._exprs[0], AndInlinedNode)
+
+
+@pytest.mark.parametrize("or_sel", ["or:", "||"])
+def test_inlining_of_or(mgenc, or_sel):
+    ast = parse_method(
+        mgenc, "test = ( true OR_SEL [ #val ] )".replace("OR_SEL", or_sel)
+    )
+
+    assert isinstance(ast._exprs[0], OrInlinedNode)
+
+
