@@ -10,6 +10,7 @@ from som.compiler.bc.bytecode_generator import (
     emit_dup_second,
     emit_jump_if_greater_with_dummy_offset,
     emit_pop_local,
+    emit_nil_local,
 )
 
 from som.compiler.method_generation_context import MethodGenerationContextBase
@@ -647,7 +648,7 @@ class MethodGenerationContext(MethodGenerationContextBase):
         self._remove_last_bytecodes(1)  # remove push_block*
 
         jump_offset_idx_to_skip_branch = emit_jump_on_bool_with_dummy_offset(
-            self, False if is_or else True, True
+            self, not is_or, True
         )
 
         to_be_inlined = self._literals[block_literal_idx]
@@ -698,14 +699,17 @@ class MethodGenerationContext(MethodGenerationContextBase):
         to_be_inlined.merge_scope_into(self)
 
         block_arg = to_be_inlined.get_argument(1, 0)
-        emit_pop_local(self, self.get_inlined_local_idx(block_arg, 0), 0)
+        i_var_idx = self.get_inlined_local_idx(block_arg, 0)
+        emit_pop_local(self, i_var_idx, 0)
 
         to_be_inlined.inline(self, False)
 
         emit_pop(self)
         emit_inc(self)
 
+        emit_nil_local(self, i_var_idx)
         self.emit_backwards_jump_offset_to_target(loop_begin_idx, parser)
+
         self.patch_jump_offset_to_point_to_next_instruction(
             jump_offset_idx_to_end, parser
         )
