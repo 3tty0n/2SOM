@@ -35,6 +35,10 @@ def emit_dup(mgenc):
     emit1(mgenc, BC.dup)
 
 
+def emit_dup_second(mgenc):
+    emit1(mgenc, BC.dup_second)
+
+
 def emit_push_block(mgenc, block_method, with_ctx):
     idx = mgenc.add_literal_if_absent(block_method)
     emit2(
@@ -179,6 +183,13 @@ def emit_jump_on_bool_with_dummy_offset(mgenc, is_if_true, needs_pop):
 
 def emit_jump_with_dummy_offset(mgenc):
     emit1(mgenc, BC.jump)
+    idx = mgenc.add_bytecode_argument_and_get_index(0)
+    mgenc.add_bytecode_argument(0)
+    return idx
+
+
+def emit_jump_if_greater_with_dummy_offset(mgenc):
+    emit1(mgenc, BC.jump_if_greater)
     idx = mgenc.add_bytecode_argument_and_get_index(0)
     mgenc.add_bytecode_argument(0)
     return idx

@@ -6,7 +6,7 @@ from som.interpreter.ast.frame import (
     FRAME_AND_INNER_RCVR_IDX,
     get_inner_as_context,
 )
-from som.interpreter.bc.bytecodes import bytecode_length, Bytecodes
+from som.interpreter.bc.bytecodes import bytecode_length, Bytecodes, bytecode_as_str
 from som.interpreter.bc.frame import (
     get_block_at,
     get_self_dynamically,
@@ -132,6 +132,11 @@ def interpret(method, frame, max_stack_size):
 
         if bytecode == Bytecodes.dup:
             val = stack[stack_ptr]
+            stack_ptr += 1
+            stack[stack_ptr] = val
+
+        elif bytecode == Bytecodes.dup_second:
+            val = stack[stack_ptr - 1]
             stack_ptr += 1
             stack[stack_ptr] = val
 
@@ -518,6 +523,15 @@ def interpret(method, frame, max_stack_size):
                 stack[stack_ptr] = None
             stack_ptr -= 1
 
+        elif bytecode == Bytecodes.jump_if_greater:
+            top = stack[stack_ptr]
+            top_2 = stack[stack_ptr - 1]
+            if top.get_embedded_integer() > top_2.get_embedded_integer():
+                stack[stack_ptr] = None
+                stack[stack_ptr - 1] = None
+                stack_ptr -= 2
+                next_bc_idx = current_bc_idx + method.get_bytecode(current_bc_idx + 1)
+
         elif bytecode == Bytecodes.jump_backward:
             next_bc_idx = current_bc_idx - method.get_bytecode(current_bc_idx + 1)
             jitdriver.can_enter_jit(
@@ -586,6 +600,19 @@ def interpret(method, frame, max_stack_size):
             if we_are_jitted():
                 stack[stack_ptr] = None
             stack_ptr -= 1
+
+        elif bytecode == Bytecodes.jump2_if_greater:
+            top = stack[stack_ptr]
+            top_2 = stack[stack_ptr - 1]
+            if top.get_embedded_integer() > top_2.get_embedded_integer():
+                stack[stack_ptr] = None
+                stack[stack_ptr - 1] = None
+                stack_ptr -= 2
+                next_bc_idx = (
+                    current_bc_idx
+                    + method.get_bytecode(current_bc_idx + 1)
+                    + (method.get_bytecode(current_bc_idx + 2) << 8)
+                )
 
         elif bytecode == Bytecodes.jump2_backward:
             next_bc_idx = current_bc_idx - (
@@ -657,7 +684,12 @@ def _unknown_bytecode(bytecode, bytecode_idx, method):
 
     dump_method(method, "")
     raise Exception(
-        "Unknown bytecode: " + str(bytecode) + " at bci: " + str(bytecode_idx)
+        "Unknown bytecode: "
+        + str(bytecode)
+        + " "
+        + bytecode_as_str(bytecode)
+        + " at bci: "
+        + str(bytecode_idx)
     )
 
 
@@ -729,7 +761,6 @@ def _send_does_not_understand(receiver, selector, stack, stack_ptr):
 
 def get_printable_location(bytecode_index, method):
     from som.vmobjects.method_bc import BcAbstractMethod
-    from som.interpreter.bc.bytecodes import bytecode_as_str
 
     assert isinstance(method, BcAbstractMethod)
     bc = method.get_bytecode(bytecode_index)
