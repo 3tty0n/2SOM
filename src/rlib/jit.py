@@ -8,6 +8,9 @@ try:
     from rpython.rlib.jit import dont_look_inside  # pylint: disable=unused-import
     from rpython.rlib.jit import we_are_jitted  # pylint: disable=unused-import
     from rpython.rlib.jit import hint  # pylint: disable=unused-import
+    from rpython.rlib.jit import not_in_trace  # pylint: disable=unused-import
+    from rpython.rlib.jit import enable_shallow_tracing  # pylint: disable=unused-import
+    from rpython.rlib.jit import enable_shallow_tracing_argn  # pylint: disable=unused-import
 except ImportError:
     "NOT_RPYTHON"
 
@@ -64,3 +67,12 @@ except ImportError:
 
     def hint(x, **_kwds):
         return x
+
+    def not_in_trace():
+        pass
+
+    def enable_shallow_tracing(func):
+        return func
+
+    def enable_shallow_tracing_argn(func):
+        return func
