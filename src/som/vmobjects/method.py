@@ -55,3 +55,6 @@ class AbstractMethod(AbstractObject):
         else:
             holder = "nil"
         return holder + ">>" + self._signature.get_embedded_string()
+
+    def get_number_of_bytecodes(self):
+        return 0

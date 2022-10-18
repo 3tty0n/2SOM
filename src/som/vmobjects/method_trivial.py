@@ -80,6 +80,9 @@ class LiteralReturn(AbstractTrivialMethod):
         def inline(self, mgenc, merge_scope=True):  # pylint: disable=unused-argument
             emit_push_constant(mgenc, self._value)
 
+        def get_number_of_bytecodes(self):
+            return 0
+
 
 class GlobalRead(AbstractTrivialMethod):
     _immutable_fields_ = ["_assoc?", "_global_name", "_context_level", "universe"]
@@ -214,3 +217,6 @@ class FieldWrite(AbstractTrivialMethod):
             num_args,
             rcvr,
         )
+
+    def get_number_of_bytecodes(self):
+        return 0
