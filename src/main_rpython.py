@@ -10,6 +10,7 @@ from som.vm.universe import main, Exit
 
 try:
     import rpython.rlib  # pylint: disable=unused-import
+    from rpython.rlib import jit
 except ImportError:
     "NOT_RPYTHON"
     print("Failed to load RPython library. Please make sure it is on PYTHONPATH")
@@ -17,8 +18,22 @@ except ImportError:
 
 # __________  Entry points  __________
 
-
 def entry_point(argv):
+    i = 0
+    while True:
+        if not i < len(argv):
+            break
+
+        if argv[i] == "--jit":
+            if len(argv) == i + 1:
+                print("missing argument after --jit")
+                return 2
+            jitarg = argv[i + 1]
+            del argv[i : i + 2]
+            jit.set_user_param(None, jitarg)
+            continue
+        i += 1
+
     try:
         main(argv)
     except Exit as ex:
@@ -30,7 +45,6 @@ def entry_point(argv):
         os.write(2, "ERROR: %s thrown during execution.\n" % ex)
         return 1
     return 1
-
 
 # _____ Define and setup target ___
 
