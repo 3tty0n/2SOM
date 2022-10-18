@@ -155,7 +155,7 @@ class _ArrayStrategy(object):
     def _set_remaining_with_block_as_long(array, block, size, next_i, storage):
         block_method = block.get_method()
         while next_i < size:
-            put_all_long_driver.jit_merge_point(block_method=block_method)
+            # put_all_long_driver.jit_merge_point(block_method=block_method)
             result = block_method.invoke_1(block)
             if isinstance(result, Integer):
                 storage[next_i] = result.get_embedded_integer()
@@ -176,7 +176,7 @@ class _ArrayStrategy(object):
     def _set_remaining_with_block_as_double(array, block, size, next_i, storage):
         block_method = block.get_method()
         while next_i < size:
-            put_all_double_driver.jit_merge_point(block_method=block_method)
+            # put_all_double_driver.jit_merge_point(block_method=block_method)
             result = block_method.invoke_1(block)
             if isinstance(result, Double):
                 storage[next_i] = result.get_embedded_double()
@@ -197,7 +197,7 @@ class _ArrayStrategy(object):
     def _set_remaining_with_block_as_bool(array, block, size, next_i, storage):
         block_method = block.get_method()
         while next_i < size:
-            put_all_bool_driver.jit_merge_point(block_method=block_method)
+            # put_all_bool_driver.jit_merge_point(block_method=block_method)
             result = block_method.invoke_1(block)
             if result is trueObject or result is falseObject:
                 storage[next_i] = result is trueObject
@@ -219,7 +219,7 @@ class _ArrayStrategy(object):
         block_method = block.get_method()
 
         while next_i < size:
-            put_all_obj_driver.jit_merge_point(block_method=block_method)
+            # put_all_obj_driver.jit_merge_point(block_method=block_method)
             storage[next_i] = block_method.invoke_1(block)
             next_i += 1
 

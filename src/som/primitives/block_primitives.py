@@ -39,11 +39,11 @@ def _while_loop(loop_condition, loop_body, while_type):
     method_condition = loop_condition.get_method()
 
     while True:
-        jitdriver.jit_merge_point(
-            method_body=method_body,
-            method_condition=method_condition,
-            while_type=while_type,
-        )
+        #jitdriver.jit_merge_point(
+        #    method_body=method_body,
+        #    method_condition=method_condition,
+        #    while_type=while_type,
+        #)
         condition_result = method_condition.invoke_1(loop_condition)
         if condition_result is while_type:
             method_body.invoke_1(loop_body)
