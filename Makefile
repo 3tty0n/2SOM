@@ -2,6 +2,7 @@
 
 PYPY_DIR ?= pypy
 RPYTHON  ?= $(PYPY_DIR)/rpython/bin/rpython --make-jobs=10
+SOM_TIER=1
 
 .PHONY: compile som-interp som-jit som-ast-jit som-bc-jit som-bc-interp som-ast-interp
 
@@ -13,13 +14,13 @@ som-ast-jit: core-lib/.git
 	SOM_INTERP=AST PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) --batch -Ojit src/main_rpython.py
 
 som-bc-jit:	core-lib/.git
-	SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) --batch -Ojit src/main_rpython.py
+	SOM_TIER=$(SOM_TIER) SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) --batch -Ojit src/main_rpython.py
 
 som-ast-interp: core-lib/.git
 	SOM_INTERP=AST PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) --batch src/main_rpython.py
 
 som-bc-interp: core-lib/.git
-	SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) --batch src/main_rpython.py
+	SOM_TIER=$(SOM_TIER) SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) --batch src/main_rpython.py
 
 som-interp: som-ast-interp som-bc-interp
 
