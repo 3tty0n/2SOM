@@ -53,13 +53,13 @@ class Stack(object):
         self.stack_ptr -= 1
         return w_x
 
-    @jit.dont_look_inside
+    # @jit.dont_look_inside
     def top(self):
         return self.stack[self.stack_ptr]
 
-    @jit.dont_look_inside
+    # @jit.dont_look_inside
     def take(self, n):
-        assert self.stack_ptr - n >= 0
+        # assert self.stack_ptr - n >= 0
         return self.stack[self.stack_ptr - n]
 
     @jit.not_in_trace
