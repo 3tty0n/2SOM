@@ -30,10 +30,6 @@ from rlib.jit import (
     enable_shallow_tracing_argn,
 )
 
-from som.vmobjects.method import AbstractMethod
-# from som.vmobjects.method_bc import BcMethod
-
-
 method_memorization = {}
 
 
@@ -708,6 +704,7 @@ def interpret(method, frame, max_stack_size):
 @jit.unroll_safe
 def interpret_tier1(method, frame, max_stack_size):
     from som.vm.current import current_universe
+    from som.vmobjects.method_bc import BcMethod
 
     current_bc_idx = 0
 
@@ -716,19 +713,17 @@ def interpret_tier1(method, frame, max_stack_size):
     tstack = t_empty()
     entry_bc_idx = 0
 
-    # tier1jitdriver.can_enter_jit(
-    #     current_bc_idx=current_bc_idx,
-    #     entry_bc_idx=entry_bc_idx,
-    #     method=method,
-    #     frame=frame,
-    #     stack=stack,
-    #     tstack=tstack,
-    # )
+    if isinstance(method, BcMethod):
+        if method not in method_memorization:
+            method_memorization[method] = None
+        else:
+            # call interpret_CALL_ASSEMBLY here
+            pass
 
     while True:
 
         # when the current_bc_index is 0, it means a method head
-        if current_bc_idx == 0:
+        if isinstance(method, BcMethod) and current_bc_idx == 0:
             tier1jitdriver.can_enter_jit(
                 current_bc_idx=current_bc_idx,
                 entry_bc_idx=entry_bc_idx,
