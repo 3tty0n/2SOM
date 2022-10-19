@@ -1,7 +1,7 @@
 #!/usr/bin/env make -f
 
 PYPY_DIR ?= pypy
-RPYTHON  ?= $(PYPY_DIR)/rpython/bin/rpython
+RPYTHON  ?= $(PYPY_DIR)/rpython/bin/rpython --make-jobs=10
 
 .PHONY: compile som-interp som-jit som-ast-jit som-bc-jit som-bc-interp som-ast-interp
 
@@ -22,7 +22,7 @@ som-bc-interp: core-lib/.git
 	SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) --batch src/main_rpython.py
 
 som-interp: som-ast-interp som-bc-interp
-	
+
 som-jit: som-ast-jit som-bc-jit
 
 test: compile
