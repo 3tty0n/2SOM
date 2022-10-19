@@ -6,6 +6,7 @@ import sys
 
 from som.compiler.parse_error import ParseError
 from som.interp_type import is_ast_interpreter, is_bytecode_interpreter
+from som.tier_type import is_tier1, is_tier2
 from som.vm.universe import main, Exit
 
 try:
@@ -57,9 +58,14 @@ def target(driver, _args):
         exe_name += "bc-"
 
     if driver.config.translation.jit:
-        exe_name += "jit"
+        exe_name += "jit-"
     else:
-        exe_name += "interp"
+        exe_name += "interp-"
+
+    if is_tier1():
+        exe_name += "tier1"
+    elif is_tier2():
+        exe_name = "tier2"
 
     driver.exe_name = exe_name
     return entry_point, None
