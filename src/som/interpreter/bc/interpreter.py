@@ -14,6 +14,7 @@ from som.interpreter.bc.frame import (
 from som.interpreter.bc.traverse_stack import t_empty, t_dump, t_push
 from som.interpreter.control_flow import ReturnException
 from som.interpreter.send import lookup_and_send_2, lookup_and_send_3
+from som.tier_type import is_tier1
 from som.vm.globals import nilObject, trueObject, falseObject
 from som.vmobjects.array import Array
 from som.vmobjects.block_bc import BcBlock
@@ -33,6 +34,9 @@ from som.vmobjects.method import AbstractMethod
 # from som.vmobjects.method_bc import BcMethod
 
 
+method_memorization = {}
+
+
 class Stack(object):
     def __init__(self, max_stack_size):
         self.stack = [None] * max_stack_size
@@ -42,7 +46,7 @@ class Stack(object):
     @enable_shallow_tracing
     def push(self, w_x):
         self.stack_ptr += 1
-        assert self.stack_ptr < len(self.stack)
+        # assert self.stack_ptr < len(self.stack)
         self.stack[self.stack_ptr] = w_x
 
     @jit.dont_look_inside
@@ -53,11 +57,11 @@ class Stack(object):
         self.stack_ptr -= 1
         return w_x
 
-    # @jit.dont_look_inside
+    @jit.dont_look_inside
     def top(self):
         return self.stack[self.stack_ptr]
 
-    # @jit.dont_look_inside
+    @jit.dont_look_inside
     def take(self, n):
         # assert self.stack_ptr - n >= 0
         return self.stack[self.stack_ptr - n]
@@ -696,6 +700,13 @@ def emit_ret(current_bc_idx, ret_val):
 
 @jit.unroll_safe
 def interpret(method, frame, max_stack_size):
+    if is_tier1():
+        return interpret_tier1(method, frame, max_stack_size)
+    else:
+        return interpret_tier2(method, frame, max_stack_size)
+
+@jit.unroll_safe
+def interpret_tier1(method, frame, max_stack_size):
     from som.vm.current import current_universe
 
     current_bc_idx = 0
@@ -705,17 +716,16 @@ def interpret(method, frame, max_stack_size):
     tstack = t_empty()
     entry_bc_idx = 0
 
+    # tier1jitdriver.can_enter_jit(
+    #     current_bc_idx=current_bc_idx,
+    #     entry_bc_idx=entry_bc_idx,
+    #     method=method,
+    #     frame=frame,
+    #     stack=stack,
+    #     tstack=tstack,
+    # )
+
     while True:
-
-        tier1jitdriver.jit_merge_point(
-            current_bc_idx=current_bc_idx,
-            entry_bc_idx=entry_bc_idx,
-            method=method,
-            frame=frame,
-            stack=stack,
-            tstack=tstack,
-        )
-
 
         # when the current_bc_index is 0, it means a method head
         if current_bc_idx == 0:
@@ -727,6 +737,15 @@ def interpret(method, frame, max_stack_size):
                 stack=stack,
                 tstack=tstack,
             )
+
+        tier1jitdriver.jit_merge_point(
+            current_bc_idx=current_bc_idx,
+            entry_bc_idx=entry_bc_idx,
+            method=method,
+            frame=frame,
+            stack=stack,
+            tstack=tstack,
+        )
 
         bytecode = method.get_bytecode(current_bc_idx)
 
