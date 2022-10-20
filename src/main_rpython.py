@@ -65,7 +65,7 @@ def target(driver, _args):
     if is_tier1():
         exe_name += "tier1"
     elif is_tier2():
-        exe_name = "tier2"
+        exe_name += "tier2"
 
     driver.exe_name = exe_name
     return entry_point, None
