@@ -68,8 +68,8 @@ except ImportError:
     def hint(x, **_kwds):
         return x
 
-    def not_in_trace():
-        pass
+    def not_in_trace(func):
+        return func
 
     def enable_shallow_tracing(func):
         return func
