@@ -713,25 +713,16 @@ def interpret_tier1(method, frame, max_stack_size):
     tstack = t_empty()
     entry_bc_idx = 0
 
-    if isinstance(method, BcMethod):
-        if method not in method_memorization:
-            method_memorization[method] = None
-        else:
-            # call interpret_CALL_ASSEMBLY here
-            pass
+    tier1jitdriver.can_enter_jit(
+        current_bc_idx=current_bc_idx,
+        entry_bc_idx=entry_bc_idx,
+        method=method,
+        frame=frame,
+        stack=stack,
+        tstack=tstack,
+    )
 
     while True:
-
-        # when the current_bc_index is 0, it means a method head
-        if isinstance(method, BcMethod) and current_bc_idx == 0:
-            tier1jitdriver.can_enter_jit(
-                current_bc_idx=current_bc_idx,
-                entry_bc_idx=entry_bc_idx,
-                method=method,
-                frame=frame,
-                stack=stack,
-                tstack=tstack,
-            )
 
         tier1jitdriver.jit_merge_point(
             current_bc_idx=current_bc_idx,
