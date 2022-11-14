@@ -1550,7 +1550,7 @@ def interpret_tier2(method, frame, max_stack_size):
         # Compute the next bytecode index
         next_bc_idx = current_bc_idx + bc_length
 
-        # promote(stack_ptr)
+        promote(stack_ptr)
 
         # Handle the current bytecode
         if bytecode == Bytecodes.halt:
@@ -2141,7 +2141,7 @@ def _do_super_send_tier2(bytecode_index, method, stack, stack_ptr):
             invokable, num_args, receiver, stack, stack_ptr
         )
     else:
-        stack_ptr = _send_does_not_understand(
+        stack_ptr = _send_does_not_understand_tier2(
             receiver, invokable.get_signature(), stack, stack_ptr
         )
     return stack_ptr
