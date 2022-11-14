@@ -49,15 +49,15 @@ class BcAbstractMethod(AbstractMethod):
 
     _immutable_fields_ = [
         "_bytecodes?[*]",
-        # "_literals[*]",
+        #"_literals[*]",
         "_inline_cache_layout",
         "_inline_cache_invokable",
         "_number_of_locals",
         "_maximum_number_of_stack_elements",
         "_number_of_arguments",
-        #"_arg_inner_access[*]",
-        #"_size_frame",
-        #"_size_inner",
+        "_arg_inner_access[*]",
+        "_size_frame",
+        "_size_inner",
         "_inlined_loops[*]",
     ]
 
@@ -116,6 +116,18 @@ class BcAbstractMethod(AbstractMethod):
             assert isinstance(obj, AbstractObject)
             if obj.is_invokable():
                 obj.set_holder(value)
+
+    @jit.elidable
+    def get_arg_inner_access(self):
+        return self._arg_inner_access
+
+    @jit.elidable
+    def get_size_frame(self):
+        return self._size_frame
+
+    @jit.elidable
+    def get_size_inner(self):
+        return self._size_inner
 
     # XXX this means that the JIT doesn't see changes to the constants
     @jit.elidable_promote("all")

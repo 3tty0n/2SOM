@@ -490,7 +490,7 @@ def _interpret_nlr_CALL_ASSEMBLER(
 @enable_shallow_tracing_argn(1)
 def _create_frame_1(invokable, frame, stack):
     rcvr = stack.top()
-    return create_frame_1(rcvr, invokable._size_frame, invokable._size_inner)
+    return create_frame_1(rcvr, invokable.get_size_frame(), invokable.get_size_inner())
 
 
 @enable_shallow_tracing_argn(1)
@@ -500,9 +500,9 @@ def _create_frame_2(invokable, frame, stack):
     return create_frame_2(
         rcvr,
         arg1,
-        invokable._arg_inner_access[0],
-        invokable._size_frame,
-        invokable._size_inner,
+        invokable.get_arg_inner_access()[0],
+        invokable.get_size_frame(),
+        invokable.get_size_inner(),
     )
 
 
@@ -515,9 +515,9 @@ def _create_frame_3(invokable, frame, stack):
         rcvr,
         arg1,
         arg2,
-        invokable._arg_inner_access,
-        invokable._size_frame,
-        invokable._size_inner,
+        invokable.get_arg_inner_access(),
+        invokable.get_size_frame(),
+        invokable.get_size_inner(),
     )
 
 
