@@ -5,6 +5,10 @@ from som.interpreter.ast.frame import (
     read_inner,
     FRAME_AND_INNER_RCVR_IDX,
     get_inner_as_context,
+    create_frame_1,
+    create_frame_2,
+    create_frame_3,
+    mark_as_no_longer_on_stack,
 )
 from som.interpreter.bc.bytecodes import bytecode_length, Bytecodes, bytecode_as_str
 from som.interpreter.bc.frame import (
@@ -22,6 +26,7 @@ from som.vmobjects.double import Double
 from som.vmobjects.integer import Integer, int_0, int_1
 
 from rlib import jit
+from rlib.objectmodel import r_dict, compute_hash
 from rlib.jit import (
     promote,
     elidable_promote,
@@ -30,41 +35,97 @@ from rlib.jit import (
     enable_shallow_tracing_argn,
 )
 
-method_memorization = {}
+
+class MethodCache(object):
+    def __init__(self, cache={}):
+        self.cache = cache
+
+    def __setitem__(self, key, val):
+        self.cache[key] = val
+
+    def __getitem__(self, key):
+        return self.cache[key]
+
+    def __contains__(self, key):
+        return key in self.cache
+
+    @jit.not_in_trace
+    def dump(self):
+        s = "{"
+        for k in self.cache.keys():
+            s += str(k[1].getstr()) + ": " + str(self.cache[k]) + ","
+        s += "}"
+        print s
+
+
+method_cache = MethodCache()
+
+
+@jit.not_in_trace
+def _set_method_cache(frame, method, current_universe, dummy=False):
+    from som.vmobjects.method_bc import BcMethod
+    from som.vmobjects.object_without_fields import ObjectWithoutFields
+
+    if not isinstance(method, BcMethod):
+        return
+
+    rcvr = read_frame(frame, FRAME_AND_INNER_RCVR_IDX)
+    rcvr_type = rcvr.get_class(current_universe)
+
+    signature = method._signature
+    key = rcvr_type, signature
+    if not key in method_cache:
+        method_cache[key] = method
+
+
+def _lookup_invokable(receiver_type, current_bc_idx, method):
+    signature = method.get_constant(current_bc_idx)
+    return receiver_type.lookup_invokable(signature)
 
 
 class Stack(object):
     def __init__(self, max_stack_size):
-        self.stack = [None] * max_stack_size
-        self.max_stack_size = max_stack_size
+        self.items = [None] * max_stack_size
         self.stack_ptr = -1
 
     @enable_shallow_tracing
     def push(self, w_x):
         self.stack_ptr += 1
-        # assert self.stack_ptr < len(self.stack)
-        self.stack[self.stack_ptr] = w_x
+        assert self.stack_ptr < len(self.items)
+        self.items[self.stack_ptr] = w_x
 
     @jit.dont_look_inside
-    def pop(self):
-        w_x = self.stack[self.stack_ptr]
+    def pop(self, dummy=False):
+        if dummy:
+            return self.items[self.stack_ptr]
+        w_x = self.items[self.stack_ptr]
         if we_are_jitted():
-            self.stack[self.stack_ptr] = None
+            self.items[self.stack_ptr] = None
         self.stack_ptr -= 1
         return w_x
 
     @jit.dont_look_inside
     def top(self):
-        return self.stack[self.stack_ptr]
+        return self.items[self.stack_ptr]
 
     @jit.dont_look_inside
-    def take(self, n):
-        # assert self.stack_ptr - n >= 0
-        return self.stack[self.stack_ptr - n]
+    def take(self, n, dummy=False):
+        if dummy:
+            return self.items[self.stack_ptr]
+        return self.items[self.stack_ptr - n]
 
-    @jit.not_in_trace
+    @enable_shallow_tracing
+    def insert(self, n, w_x):
+        assert n <= self.stack_ptr
+        self.items[self.stack_ptr - n] = w_x
+
+    @jit.dont_look_inside
     def dump(self):
-        print(self.stack, self.stack_ptr)
+        s = "["
+        for w_v in self.items:
+            s += str(w_v) + ","
+        s += "]"
+        print s, self.stack_ptr
 
 
 @enable_shallow_tracing
@@ -75,7 +136,7 @@ def _do_super_send(stack, bytecode_index, method):
     invokable = receiver_class.lookup_invokable(signature)
 
     num_args = invokable.get_number_of_signature_arguments()
-    receiver = stack.stack[stack.stack_ptr - (num_args - 1)]
+    receiver = stack.items[stack.stack_ptr - (num_args - 1)]
 
     if invokable:
         method.set_inline_cache(
@@ -90,15 +151,9 @@ def _do_super_send(stack, bytecode_index, method):
         else:
             bc = Bytecodes.q_super_send_n
         method.set_bytecode(bytecode_index, bc)
-        stack_ptr = _invoke_invokable_slow_path(
-            invokable, num_args, receiver, stack.stack, stack.stack_ptr
-        )
+        _invoke_invokable_slow_path(invokable, num_args, receiver, stack)
     else:
-        stack_ptr = _send_does_not_understand(
-            receiver, invokable.get_signature(), stack.stack, stack.stack_ptr
-        )
-
-    stack.stack_ptr = stack_ptr
+        _send_does_not_understand(receiver, invokable.get_signature(), stack)
 
 
 @enable_shallow_tracing_argn(0)
@@ -117,7 +172,25 @@ def _do_return_non_local(result, frame, ctx_level):
     raise ReturnException(result, block.get_on_stack_marker())
 
 
-def _invoke_invokable_slow_path(invokable, num_args, receiver, stack, stack_ptr):
+def _invoke_invokable_slow_path(invokable, num_args, receiver, stack):
+    if num_args == 1:
+        stack.insert(0, invokable.invoke_1(receiver))
+
+    elif num_args == 2:
+        arg = stack.pop()
+        stack.insert(0, invokable.invoke_2(receiver, arg))
+
+    elif num_args == 3:
+        arg2 = stack.pop()
+        arg1 = stack.pop()
+
+        stack.insert(0, invokable.invoke_3(receiver, arg1, arg2))
+
+    else:
+        stack.stack_ptr = invokable.invoke_n(stack.items, stack.stack_ptr)
+
+
+def _invoke_invokable_slow_path_tier2(invokable, num_args, receiver, stack, stack_ptr):
     if num_args == 1:
         stack[stack_ptr] = invokable.invoke_1(receiver)
 
@@ -391,96 +464,187 @@ def _pop_field_1(stack, frame):
     self_obj.set_field(1, value)
 
 
-@enable_shallow_tracing_argn(3)
-def _send_1(method, current_universe, current_bc_idx, next_bc_idx, stack):
+@jit.dont_look_inside
+def _interpret_naive(
+    frame, stack, current_bc_idx, entry_bc_idx, method, tstack, dummy=False
+):
+    return interpret_tier1(method, frame, 8, dummy)
+
+
+@jit.dont_look_inside
+def _interpret_CALL_ASSEMBLER(
+    frame, stack, current_bc_idx, entry_bc_idx, method, tstack, dummy=False
+):
+    # if dummy:
+    #     return
+    return interpret_tier1(method, frame, 8, dummy)
+
+
+@enable_shallow_tracing
+def _interpret_nlr_CALL_ASSEMBLER(
+    frame, stack, current_bc_idx, entry_bc_idx, invokable, tstack, dummy=False
+):
+    return _interp_with_nlr(invokable, frame, 8, dummy)
+
+
+@enable_shallow_tracing_argn(1)
+def _create_frame_1(invokable, frame, stack):
+    rcvr = stack.top()
+    return create_frame_1(rcvr, invokable._size_frame, invokable._size_inner)
+
+
+@enable_shallow_tracing_argn(1)
+def _create_frame_2(invokable, frame, stack):
+    rcvr = stack.take(1)
+    arg1 = stack.pop()
+    return create_frame_2(
+        rcvr,
+        arg1,
+        invokable._arg_inner_access[0],
+        invokable._size_frame,
+        invokable._size_inner,
+    )
+
+
+@enable_shallow_tracing_argn(1)
+def _create_frame_3(invokable, frame, stack):
+    rcvr = stack.take(2)
+    arg2 = stack.pop()
+    arg1 = stack.pop()
+    return create_frame_3(
+        rcvr,
+        arg1,
+        arg2,
+        invokable._arg_inner_access,
+        invokable._size_frame,
+        invokable._size_inner,
+    )
+
+
+@enable_shallow_tracing_argn(2)
+def _send_1(method, current_bc_idx, next_bc_idx, stack):
+    from som.vmobjects.method_bc import BcMethod
+    from som.vm.current import current_universe
+
     signature = method.get_constant(current_bc_idx)
     receiver = stack.top()
 
     layout = receiver.get_object_layout(current_universe)
     invokable = _lookup(layout, signature, method, current_bc_idx)
+
+    if not we_are_jitted():
+        if isinstance(invokable, BcMethod):
+            rcvr_type = receiver.get_class(current_universe)
+            method.set_receiver_type(current_bc_idx, rcvr_type)
+            key = rcvr_type, signature
+            if key not in method_cache:
+                method_cache[key] = invokable
+
     if invokable is not None:
-        stack.stack[stack.stack_ptr] = invokable.invoke_1(receiver)
+        stack.insert(0, invokable.invoke_1(receiver))
     elif not layout.is_latest:
         _update_object_and_invalidate_old_caches(
             receiver, method, current_bc_idx, current_universe
         )
         next_bc_idx = current_bc_idx
     else:
-        stack.stack_ptr = _send_does_not_understand(
-            receiver, signature, stack.stack, stack.stack_ptr
+        _send_does_not_understand(
+            receiver,
+            signature,
+            stack,
         )
 
     return next_bc_idx
 
 
-@enable_shallow_tracing_argn(3)
-def _send_2(method, current_universe, current_bc_idx, next_bc_idx, stack):
+@enable_shallow_tracing_argn(2)
+def _send_2(method, current_bc_idx, next_bc_idx, stack):
+    from som.vmobjects.method_bc import BcMethod, BcMethodNLR
+    from som.vm.current import current_universe
+
+    # print current_bc_idx, next_bc_idx; stack.dump()
+
     signature = method.get_constant(current_bc_idx)
     receiver = stack.take(1)
 
     layout = receiver.get_object_layout(current_universe)
     invokable = _lookup(layout, signature, method, current_bc_idx)
+
+    if not we_are_jitted():
+        if isinstance(invokable, BcMethod):
+            rcvr_type = receiver.get_class(current_universe)
+            method.set_receiver_type(current_bc_idx, rcvr_type)
+            key = rcvr_type, signature
+            if key not in method_cache:
+                method_cache[key] = invokable
+
     if invokable is not None:
         arg = stack.pop()
-        stack.stack[stack.stack_ptr] = invokable.invoke_2(receiver, arg)
+        stack.insert(0, invokable.invoke_2(receiver, arg))
     elif not layout.is_latest:
         _update_object_and_invalidate_old_caches(
             receiver, method, current_bc_idx, current_universe
         )
         next_bc_idx = current_bc_idx
     else:
-        stack.stack_ptr = _send_does_not_understand(
-            receiver, signature, stack.stack, stack.stack_ptr
-        )
+        _send_does_not_understand(receiver, signature, stack)
 
     return next_bc_idx
 
 
-@enable_shallow_tracing_argn(3)
-def _send_3(method, current_universe, current_bc_idx, next_bc_idx, stack):
+@enable_shallow_tracing_argn(2)
+def _send_3(method, current_bc_idx, next_bc_idx, stack):
+    from som.vmobjects.method_bc import BcMethod
+    from som.vm.current import current_universe
+
     signature = method.get_constant(current_bc_idx)
     receiver = stack.take(2)
-
     layout = receiver.get_object_layout(current_universe)
     invokable = _lookup(layout, signature, method, current_bc_idx)
+
+    if not we_are_jitted():
+        if isinstance(invokable, BcMethod):
+            rcvr_type = receiver.get_class(current_universe)
+            method.set_receiver_type(current_bc_idx, rcvr_type)
+            key = rcvr_type, signature
+            if key not in method_cache:
+                method_cache[key] = invokable
+
     if invokable is not None:
         arg2 = stack.pop()
         arg1 = stack.pop()
-
-        stack.stack[stack.stack_ptr] = invokable.invoke_3(receiver, arg1, arg2)
+        stack.insert(0, invokable.invoke_3(receiver, arg1, arg2))
     elif not layout.is_latest:
         _update_object_and_invalidate_old_caches(
             receiver, method, current_bc_idx, current_universe
         )
         next_bc_idx = current_bc_idx
     else:
-        stack.stack_ptr = _send_does_not_understand(
-            receiver, signature, stack.stack, stack.stack_ptr
-        )
+        _send_does_not_understand(receiver, signature, stack)
 
     return next_bc_idx
 
 
-@enable_shallow_tracing_argn(3)
-def _send_n(method, current_universe, current_bc_idx, next_bc_idx, stack):
+@enable_shallow_tracing_argn(2)
+def _send_n(method, current_bc_idx, next_bc_idx, stack):
+    from som.vm.current import current_universe
+
     signature = method.get_constant(current_bc_idx)
-    receiver = stack.stack[
+    receiver = stack.items[
         stack.stack_ptr - (signature.get_number_of_signature_arguments() - 1)
     ]
 
     layout = receiver.get_object_layout(current_universe)
     invokable = _lookup(layout, signature, method, current_bc_idx)
     if invokable is not None:
-        stack.stack_ptr = invokable.invoke_n(stack.stack, stack.stack_ptr)
+        stack.stack_ptr = invokable.invoke_n(stack.items, stack.stack_ptr)
     elif not layout.is_latest:
         _update_object_and_invalidate_old_caches(
             receiver, method, current_bc_idx, current_universe
         )
         next_bc_idx = current_bc_idx
     else:
-        stack.stack_ptr = _send_does_not_understand(
-            receiver, signature, stack.stack, stack.stack_ptr
-        )
+        _send_does_not_understand(receiver, signature, stack)
 
     return next_bc_idx
 
@@ -569,7 +733,7 @@ def _q_super_send_3(stack, method, current_bc_idx):
 @enable_shallow_tracing
 def _q_super_send_n(stack, method, current_bc_idx):
     invokable = method.get_inline_cache_invokable(current_bc_idx)
-    stack.stack_ptr = invokable.invoke_n(stack.stack, stack.stack_ptr)
+    stack.stack_ptr = invokable.invoke_n(stack.items, stack.stack_ptr)
 
 
 @enable_shallow_tracing_argn(2)
@@ -694,17 +858,68 @@ def emit_ret(current_bc_idx, ret_val):
     return current_bc_idx
 
 
+@jit.dont_look_inside
+def emit_label(frame, stack, label_id):
+    return stack.take(0)
+
+
+@jit.dont_look_inside
+def begin_slow_path(frame, stack):
+    return stack.top()
+
+
+@jit.dont_look_inside
+def end_slow_path(frame, stack):
+    return stack.top()
+
+
+@jit.dont_look_inside
+def emit_ptr_eq(rcvr, rcvr_type, dummy=False):
+    from som.vm.current import current_universe
+
+    if dummy:
+        if rcvr is None:  # rcvr is always None during shallow tracing
+            return True
+    return rcvr.get_class(current_universe) is rcvr_type
+
+
+@jit.dont_look_inside
+def emit_jump_to_label(frame, stack, label_id):
+    return stack.top()
+
+
+@jit.dont_look_inside
+def _interp_with_nlr(method, new_frame, max_stack_size, dummy=False):
+    inner = get_inner_as_context(new_frame)
+
+    try:
+        result = interpret(method, new_frame, max_stack_size, dummy)
+        mark_as_no_longer_on_stack(inner)
+        return result
+    except ReturnException as e:
+        mark_as_no_longer_on_stack(inner)
+        if e.has_reached_target(inner):
+            return e.get_result()
+        raise e
+
+
 @jit.unroll_safe
-def interpret(method, frame, max_stack_size):
+def interpret(method, frame, max_stack_size, dummy=False):
+    if dummy:
+        return
     if is_tier1():
         return interpret_tier1(method, frame, max_stack_size)
     else:
         return interpret_tier2(method, frame, max_stack_size)
 
+
 @jit.unroll_safe
-def interpret_tier1(method, frame, max_stack_size):
+def interpret_tier1(method, frame, max_stack_size, dummy=False):
     from som.vm.current import current_universe
     from som.vmobjects.method_bc import BcMethod
+
+    if dummy:
+        return
 
     current_bc_idx = 0
 
@@ -733,6 +948,9 @@ def interpret_tier1(method, frame, max_stack_size):
             tstack=tstack,
         )
 
+        if we_are_jitted():
+            _set_method_cache(frame, method, current_universe)
+
         bytecode = method.get_bytecode(current_bc_idx)
 
         # Get the length of the current bytecode
@@ -743,7 +961,7 @@ def interpret_tier1(method, frame, max_stack_size):
 
         # promote(stack_ptr)
 
-        # debug_print(current_bc_idx, entry_bc_idx, method, tstack)
+        # print get_printable_location_tier1(current_bc_idx, entry_bc_idx, method, tstack)
 
         # Handle the current bytecode
         if bytecode == Bytecodes.halt:
@@ -861,24 +1079,129 @@ def interpret_tier1(method, frame, max_stack_size):
             _pop_field_1(stack, frame)
 
         elif bytecode == Bytecodes.send_1:
-            next_bc_idx = _send_1(
-                method, current_universe, current_bc_idx, next_bc_idx, stack
-            )
+            if we_are_jitted():
+                rcvr_type = method.get_receiver_type(current_bc_idx)
+                if rcvr_type is None:
+                    next_bc_idx = _send_1(
+                        method,
+                        current_bc_idx,
+                        next_bc_idx,
+                        stack,
+                    )
+                else:
+                    rcvr = stack.take(1, dummy=True)
+                    if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
+                        invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
+                        new_frame = _create_frame_1(invokable, frame, stack)
+                        new_stack = Stack(8)
+                        result = _interpret_CALL_ASSEMBLER(
+                            frame=new_frame,
+                            stack=new_stack,
+                            current_bc_idx=0,
+                            entry_bc_idx=0,
+                            method=invokable,
+                            tstack=t_empty(),
+                            dummy=True,
+                        )
+                        stack.insert(0, result)
+                        # ---------------------------------------------------------------
+                        begin_slow_path(frame, stack)
+                        next_bc_idx = _send_1(
+                            method,
+                            current_bc_idx,
+                            next_bc_idx,
+                            stack,
+                        )
+                        end_slow_path(frame, stack)
+                        # ---------------------------------------------------------------
+            else:
+                next_bc_idx = _send_1(method, current_bc_idx, next_bc_idx, stack)
 
         elif bytecode == Bytecodes.send_2:
-            next_bc_idx = _send_2(
-                method, current_universe, current_bc_idx, next_bc_idx, stack
-            )
+            if we_are_jitted():
+                rcvr_type = method.get_receiver_type(current_bc_idx)
+                if rcvr_type is None:
+                    next_bc_idx = _send_2(
+                        method,
+                        current_bc_idx,
+                        next_bc_idx,
+                        stack,
+                    )
+                else:
+                    rcvr = stack.take(1, dummy=True)
+                    if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
+                        invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
+                        new_frame = _create_frame_2(invokable, frame, stack)
+                        new_stack = Stack(8)
+                        result = _interpret_CALL_ASSEMBLER(
+                            frame=new_frame,
+                            stack=new_stack,
+                            current_bc_idx=0,
+                            entry_bc_idx=0,
+                            method=invokable,
+                            tstack=t_empty(),
+                            dummy=True,
+                        )
+                        stack.insert(0, result)
+                        # ---------------------------------------------------------------
+                        begin_slow_path(frame, stack)
+                        next_bc_idx = _send_2(
+                            method,
+                            current_bc_idx,
+                            next_bc_idx,
+                            stack,
+                        )
+                        end_slow_path(frame, stack)
+                        # ---------------------------------------------------------------
+            else:
+                next_bc_idx = _send_2(
+                    method,
+                    current_bc_idx,
+                    next_bc_idx,
+                    stack,
+                )
 
         elif bytecode == Bytecodes.send_3:
-            next_bc_idx = _send_3(
-                method, current_universe, current_bc_idx, next_bc_idx, stack
-            )
+            if we_are_jitted():
+                rcvr_type = method.get_receiver_type(current_bc_idx)
+                if rcvr_type is None:
+                    next_bc_idx = _send_3(
+                        method,
+                        current_bc_idx,
+                        next_bc_idx,
+                        stack,
+                    )
+                else:
+                    rcvr = stack.take(1, dummy=True)
+                    if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
+                        invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
+                        new_frame = _create_frame_2(invokable, frame, stack)
+                        new_stack = Stack(8)
+                        result = _interpret_CALL_ASSEMBLER(
+                            frame=new_frame,
+                            stack=new_stack,
+                            current_bc_idx=0,
+                            entry_bc_idx=0,
+                            method=invokable,
+                            tstack=t_empty(),
+                            dummy=True,
+                        )
+                        stack.insert(0, result)
+                        # ---------------------------------------------------------------
+                        begin_slow_path(frame, stack)
+                        next_bc_idx = _send_3(
+                            method,
+                            current_bc_idx,
+                            next_bc_idx,
+                            stack,
+                        )
+                        end_slow_path(frame, stack)
+                        # ---------------------------------------------------------------
+            else:
+                next_bc_idx = _send_3(method, current_bc_idx, next_bc_idx, stack)
 
         elif bytecode == Bytecodes.send_n:
-            next_bc_idx = _send_n(
-                method, current_universe, current_bc_idx, next_bc_idx, stack
-            )
+            next_bc_idx = _send_n(method, current_bc_idx, next_bc_idx, stack)
 
         elif bytecode == Bytecodes.super_send:
             _do_super_send(stack, current_bc_idx, method)
@@ -886,6 +1209,7 @@ def interpret_tier1(method, frame, max_stack_size):
         elif bytecode == Bytecodes.return_local:
             if we_are_jitted():
                 if tstack.t_is_empty():
+                    _set_method_cache(frame, method, current_universe)
                     ret_object = _return_local(stack, dummy=True)
                     next_bc_idx = emit_ret(entry_bc_idx, ret_object)
                     tier1jitdriver.can_enter_jit(
@@ -906,6 +1230,7 @@ def interpret_tier1(method, frame, max_stack_size):
         elif bytecode == Bytecodes.return_non_local:
             if we_are_jitted():
                 if tstack.t_is_empty():
+                    _set_method_cache(frame, method, current_universe)
                     val = stack.top()
                     ret_object = _do_return_non_local(
                         val, frame, method.get_bytecode(current_bc_idx + 1)
@@ -936,6 +1261,7 @@ def interpret_tier1(method, frame, max_stack_size):
         elif bytecode == Bytecodes.return_self:
             if we_are_jitted():
                 if tstack.t_is_empty():
+                    # cached_code.dump()
                     ret_object = _return_self(frame, dummy=True)
                     next_bc_idx = emit_ret(entry_bc_idx, ret_object)
                     tier1jitdriver.can_enter_jit(
@@ -1475,7 +1801,7 @@ def interpret_tier2(method, frame, max_stack_size):
                 )
                 next_bc_idx = current_bc_idx
             else:
-                stack_ptr = _send_does_not_understand(
+                stack_ptr = _send_does_not_understand_tier2(
                     receiver, signature, stack, stack_ptr
                 )
 
@@ -1497,7 +1823,7 @@ def interpret_tier2(method, frame, max_stack_size):
                 )
                 next_bc_idx = current_bc_idx
             else:
-                stack_ptr = _send_does_not_understand(
+                stack_ptr = _send_does_not_understand_tier2(
                     receiver, signature, stack, stack_ptr
                 )
 
@@ -1523,7 +1849,7 @@ def interpret_tier2(method, frame, max_stack_size):
                 )
                 next_bc_idx = current_bc_idx
             else:
-                stack_ptr = _send_does_not_understand(
+                stack_ptr = _send_does_not_understand_tier2(
                     receiver, signature, stack, stack_ptr
                 )
 
@@ -1543,7 +1869,7 @@ def interpret_tier2(method, frame, max_stack_size):
                 )
                 next_bc_idx = current_bc_idx
             else:
-                stack_ptr = _send_does_not_understand(
+                stack_ptr = _send_does_not_understand_tier2(
                     receiver, signature, stack, stack_ptr
                 )
 
@@ -1811,7 +2137,7 @@ def _do_super_send_tier2(bytecode_index, method, stack, stack_ptr):
         else:
             bc = Bytecodes.q_super_send_n
         method.set_bytecode(bytecode_index, bc)
-        stack_ptr = _invoke_invokable_slow_path(
+        stack_ptr = _invoke_invokable_slow_path_tier2(
             invokable, num_args, receiver, stack, stack_ptr
         )
     else:
@@ -1844,6 +2170,11 @@ def get_self(frame, ctx_level):
     if ctx_level == 0:
         return read_frame(frame, FRAME_AND_INNER_RCVR_IDX)
     return get_block_at(frame, ctx_level).get_from_outer(FRAME_AND_INNER_RCVR_IDX)
+
+
+@enable_shallow_tracing_argn(0)
+def _get_inline_cache_invokable(method, bytecode_index):
+    return method.get_inline_cache_invokable(bytecode_index)
 
 
 @elidable_promote("all")
@@ -1882,7 +2213,33 @@ def _update_object_and_invalidate_old_caches(obj, method, bytecode_index, univer
         method.set_inline_cache(bytecode_index + 1, None, None)
 
 
-def _send_does_not_understand(receiver, selector, stack, stack_ptr):
+@enable_shallow_tracing
+def _send_does_not_understand(receiver, selector, stack):
+    # ignore self
+    number_of_arguments = selector.get_number_of_signature_arguments() - 1
+    arguments_array = Array.from_size(number_of_arguments)
+
+    # Remove all arguments and put them in the freshly allocated array
+    i = number_of_arguments - 1
+    while i >= 0:
+        # value = stack[stack_ptr]
+        # if we_are_jitted():
+        #     stack[stack_ptr] = None
+        # stack_ptr -= 1
+        value = stack.pop()
+
+        arguments_array.set_indexable_field(i, value)
+        i -= 1
+
+    stack.insert(
+        0,
+        lookup_and_send_3(
+            receiver, selector, arguments_array, "doesNotUnderstand:arguments:"
+        ),
+    )
+
+
+def _send_does_not_understand_tier2(receiver, selector, stack, stack_ptr):
     # ignore self
     number_of_arguments = selector.get_number_of_signature_arguments() - 1
     arguments_array = Array.from_size(number_of_arguments)

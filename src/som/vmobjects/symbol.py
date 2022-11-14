@@ -53,6 +53,9 @@ class Symbol(String):
     def __str__(self):
         return "#" + self._string
 
+    def getstr(self):
+        return "#" + self._string
+
     def get_class(self, universe):
         return universe.symbol_class
 

@@ -11,6 +11,7 @@ from scipy.stats import gmean
 from pprint import pprint
 
 offset = 30
+invocations = 5
 
 try:
     data = sys.argv[1]
@@ -22,7 +23,9 @@ try:
 except IndexError:
     pass
 
-name = data.split(".")[0]
+name = data.split(".")
+del name[-1]
+name = '.'.join(name)
 
 targets = set()
 benchs = set()
@@ -75,7 +78,7 @@ with open(data, "r") as f:
             elapsed_times = result[target][bench]
             means = []
             for i in range(offset):
-                mean = calc_gmean(elapsed_times, offset, 5, i)
+                mean = calc_gmean(elapsed_times, offset, invocations, i)
                 means.append(mean)
 
             l = []
@@ -91,13 +94,13 @@ with open(data, "r") as f:
 
     df = pd.DataFrame(result_shaped)
 
-    fig = plt.figure(figsize=(16, 18))
+    fig = plt.figure(figsize=(18, 20))
     fig.tight_layout()
 
     def plot_graph(df, ax, bench):
         ax.title.set_text(bench)
         ax.plot(df[bench]["RPySOM-bc-jit-tier1"], label="threaded code")
-        #ax.plot(df[bench]["RPySOM-bc-jit-tier2"], label="tracing JIT")
+        ax.plot(df[bench]["RPySOM-bc-jit-tier2"], label="tracing JIT")
         ax.plot(df[bench]["RPySOM-bc-interp"], label="interpreter")
 
     axs = []

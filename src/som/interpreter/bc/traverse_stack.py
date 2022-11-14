@@ -42,7 +42,7 @@ def t_push(bc_idx, next):
     return result
 
 
-@jit.not_in_trace
+@jit.dont_look_inside
 def t_dump(tstack):
     s = "["
     while not tstack.t_is_empty():

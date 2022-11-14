@@ -17,6 +17,9 @@ class Integer(AbstractObject):
     def get_embedded_integer(self):
         return self._embedded_integer
 
+    def get_embedded_string(self):
+        return str(self._embedded_integer)
+
     def __str__(self):
         return str(self._embedded_integer)
 

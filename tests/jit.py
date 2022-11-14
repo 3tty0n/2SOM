@@ -6,6 +6,7 @@
 import py
 from rpython import conftest  # pylint: disable=import-error
 from rpython.jit.metainterp.test.test_ajit import LLJitMixin  # pylint: disable=E
+from rpython.jit.backend.x86.test.test_basic import Jit386Mixin  # pylint: disable=E
 
 from som.vm.current import current_universe
 from som.vm.universe import Exit
@@ -18,7 +19,7 @@ class Option:
     viewloops = True
 
 
-conftest.option = Option
+# conftest.option = Option
 
 main_path = py.path.local(__file__).dirpath().dirpath()  # pylint: disable=no-member
 
@@ -26,7 +27,7 @@ cp = main_path.join("Smalltalk").strpath
 benchmark_cp = cp + ":" + main_path.join("Examples/Benchmarks").strpath
 
 
-class TestLLtype(LLJitMixin):
+class TestSOM:
     @staticmethod
     def _compile_and_lookup(source, start, classpath):
         universe = current_universe
@@ -44,7 +45,8 @@ class TestLLtype(LLJitMixin):
 
         def interp_w():
             try:
-                invokable.invoke(rcvr, [])
+                result = invokable.invoke_1(rcvr)
+                print result.get_embedded_string()
             except Exit as exit_ex:
                 return exit_ex.code
             return -1
@@ -57,6 +59,20 @@ class TestLLtype(LLJitMixin):
         class_def = """C_0 = ( run = ( %s ) )""" % simple_expr
         self._run_meta_interp(class_def, "run", classpath)
 
+    def test_rec_count(self):
+        self._run_meta_interp(
+            """
+            C_0 = (
+                count: n = ( (n > 0)
+                                 ifTrue: [ ^ n + (self count: n - 1) ]
+                                 ifFalse:  [ ^ n ]
+                )
+                run = ( ^ self count: 100 )
+            )
+            """,
+            "run",
+        )
+
     def test_delta_blue(self):
         delta_blue_cp = (
             cp + ":" + main_path.join("Examples/Benchmarks/DeltaBlue").strpath
@@ -67,13 +83,28 @@ class TestLLtype(LLJitMixin):
             delta_blue_cp,
         )
 
+    def test_recurse(self):
+        self._run_meta_interp(
+            """
+            C_0 = (
+              recurse: n = (
+                (n > 0) ifTrue: [ self recurse: n - 1. self recurse: n - 1 ].
+                ^ n
+              )
+
+              run = (^ self recurse: 3)
+            )
+            """,
+            "run",
+        )
+
     def test_inc(self):
         self._run_meta_interp(
             """
             C_0 = (
                 run = ( | tmp |
                         tmp := 1.
-                        10000 timesRepeat: [
+                        100 timesRepeat: [
                           tmp := tmp + 1 ].
                         ^tmp
                 )
@@ -114,7 +145,7 @@ class TestLLtype(LLJitMixin):
             singleRun = (
         | sum |
         sum := 0.
-        [sum < 1000]
+        [sum < 100]
             whileTrue:
                 [sum := sum + 1].
         ^ sum
@@ -129,20 +160,6 @@ class TestLLtype(LLJitMixin):
         ^ sum
     ) ) """,
             "benchmark",
-        )
-
-    def test_rec(self):
-        self._run_meta_interp(
-            """
-            C_1 = (
-                count: n = ( ^ (n > 0)
-                                 ifTrue: [self count: n - 1]
-                                 ifFalse: [n]
-                )
-                run = ( ^ self count: 100000 )
-            )
-            """,
-            "run",
         )
 
     def test_sieve(self):
@@ -178,12 +195,27 @@ class TestLLtype(LLJitMixin):
         self._run_meta_interp(
             """Fibonacci = (
     benchmark = ( | result |
-        result := self fibonacci: 20.
-        (result = 10946) ifFalse: [self error: 'Wrong result: ' + result + ' should be: 10946' ])
+        result := self fibonacci: 4.
+        ^ true
+        )
 
     fibonacci: n = (
-        ^(n <= 1) ifTrue:  1 ifFalse: [ (self fibonacci: (n - 1)) + (self fibonacci: (n - 2)) ])
+        (n <= 1) ifTrue: [ ^ 1 ] ifFalse: [ ^ (self fibonacci: (n - 1)) + (self fibonacci: (n - 2)) ])
 )        """,
+            "benchmark",
+        )
+
+    def test_sum(self):
+        self._run_meta_interp(
+            """Sum = (
+    benchmark = ( | result |
+        result := self sum: 10.
+        ^ (result = 55) )
+
+    sum: n = (
+        ^ (n <= 1) ifTrue: 1 ifFalse: [ (n + (self sum: (n - 1))) ]
+
+    ))""",
             "benchmark",
         )
 
@@ -211,6 +243,35 @@ class TestLLtype(LLJitMixin):
 
 )
 """,
+            "benchmark",
+        )
+
+    def test_bug_1(self):
+        self._run_meta_interp(
+            """
+    WhileLoop = (
+            isNil: n = (^ n)
+
+            singleRun = (
+        | sum c |
+        sum := 0.
+        [sum < 100]
+            whileTrue:
+                [ sum := sum + 1.
+                  (sum < 50) ifTrue: [ c := self ]
+                             ifFalse: [ c := nil ].
+                 c isNil ].
+        ^ sum
+    )
+
+    benchmark = (
+        | sum |
+        sum := 0.
+        [sum < 20000]
+            whileTrue:
+                [sum := sum + self singleRun].
+        ^ sum
+    ) ) """,
             "benchmark",
         )
 
@@ -293,3 +354,11 @@ class TestLLtype(LLJitMixin):
 
     def test_integer_loop(self):
         self._eval_expr("""IntegerLoop benchmark""", benchmark_cp)
+
+
+class TestLLtype(TestSOM, LLJitMixin):
+    pass
+
+
+class TestBackend(TestSOM, Jit386Mixin):
+    pass

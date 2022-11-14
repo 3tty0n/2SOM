@@ -49,15 +49,15 @@ class BcAbstractMethod(AbstractMethod):
 
     _immutable_fields_ = [
         "_bytecodes?[*]",
-        "_literals[*]",
+        # "_literals[*]",
         "_inline_cache_layout",
         "_inline_cache_invokable",
         "_number_of_locals",
         "_maximum_number_of_stack_elements",
         "_number_of_arguments",
-        "_arg_inner_access[*]",
-        "_size_frame",
-        "_size_inner",
+        #"_arg_inner_access[*]",
+        #"_size_frame",
+        #"_size_inner",
         "_inlined_loops[*]",
     ]
 
@@ -81,6 +81,10 @@ class BcAbstractMethod(AbstractMethod):
         self._inline_cache_layout = [None] * num_bytecodes
         self._inline_cache_invokable = [None] * num_bytecodes
 
+        self._receiver_types = [None] * num_bytecodes
+        self._selectors = [None] * num_bytecodes
+        self._invokable = [None] * num_bytecodes
+
         self._literals = literals
 
         self._number_of_arguments = signature.get_number_of_signature_arguments()
@@ -92,6 +96,7 @@ class BcAbstractMethod(AbstractMethod):
         self._size_inner = size_inner
 
         self._inlined_loops = inlined_loops
+        self._signature = signature
 
     def get_number_of_locals(self):
         return self._number_of_locals
@@ -194,6 +199,27 @@ class BcAbstractMethod(AbstractMethod):
         )
         self.set_bytecode(bytecode_index + 1, var.access_idx)
 
+    def set_receiver_type(self, bytecode_index, receiver_type):
+        self._receiver_types[bytecode_index] = receiver_type
+
+    @jit.elidable_promote("all")
+    def get_receiver_type(self, bytecode_index):
+        assert 0 <= bytecode_index < len(self._receiver_types)
+        return self._receiver_types[bytecode_index]
+
+    def set_invokable(self, bytecode_index, invokable):
+        self._invokable[bytecode_index] = invokable
+
+    @jit.elidable
+    def get_invokable(self, bytecode_index):
+        assert 0 <= bytecode_index < len(self._invokable)
+        return self._invokable[bytecode_index]
+
+    @jit.elidable
+    def has_invokable(self, bytecode_index):
+        return self._invokable[bytecode_index] is not None
+
+
 
 def _interp_with_nlr(method, new_frame, max_stack_size):
     inner = get_inner_as_context(new_frame)
@@ -244,7 +270,6 @@ class BcMethod(BcAbstractMethod):
             stack_ptr,
             self._number_of_arguments,
         )
-
         result = interpret(self, new_frame, self._maximum_number_of_stack_elements)
         return stack_pop_old_arguments_and_push_result(
             stack, stack_ptr, self._number_of_arguments, result
