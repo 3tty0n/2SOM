@@ -23,10 +23,23 @@ try:
 except IndexError:
     pass
 
-name = data.split(".")
-del name[-1]
-name = '.'.join(name)
 
+def calc_gmean(elapsed_times, offset, n, i):
+    times = [elapsed_times[i + offset * j][1] for j in range(n)]
+    multiply = 1
+    for t in times:
+        multiply = multiply * t
+    geometric_mean = multiply ** (1/n)
+    return geometric_mean
+
+
+def get_name(data):
+    l = data.split(".")
+    del l[-1]
+    return '.'.join(l)
+
+
+name = get_name(data)
 targets = set()
 benchs = set()
 
@@ -66,10 +79,6 @@ with open(data, "r") as f:
     targets = sorted(targets)
     benchs = sorted(benchs)
 
-
-    def calc_gmean(elapsed_times, offset, n, i):
-        times = [elapsed_times[i + offset * j][1] for j in range(n)]
-        return gmean(times)
 
     # calculate the mean of each elapsed time
     result_shaped = {}
@@ -113,7 +122,7 @@ with open(data, "r") as f:
         plot_graph(df, ax, bench)
 
     handles, labels = axs[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc=(0.75, 0.25))
+    fig.legend(handles, labels, loc=(0.8, 0.1))
 
     plt.savefig(name + ".pdf")
     plt.savefig(name + ".png")
