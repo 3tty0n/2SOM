@@ -13,17 +13,6 @@ from pprint import pprint
 offset = 30
 invocations = 5
 
-try:
-    data = sys.argv[1]
-except IndexError:
-    raise Exception("argument is not specified")
-
-try:
-    offset = int(sys.argv[2])
-except IndexError:
-    pass
-
-
 def calc_gmean(elapsed_times, offset, n, i):
     times = [elapsed_times[i + offset * j][1] for j in range(n)]
     multiply = 1
@@ -32,17 +21,28 @@ def calc_gmean(elapsed_times, offset, n, i):
     geometric_mean = multiply ** (1/n)
     return geometric_mean
 
-
 def get_name(data):
     l = data.split(".")
     del l[-1]
     return '.'.join(l)
 
+try:
+    data = sys.argv[1]
+except IndexError:
+    raise Exception("argument is not specified")
 
 name = get_name(data)
+
+try:
+    offset_ext = int(sys.argv[2])
+    if offset_ext > offset:
+        raise Exception("offset %d is out of range %d" % (offset_ext, offset))
+    offset = offset_ext
+except IndexError:
+    pass
+
 targets = set()
 benchs = set()
-
 
 with open(data, "r") as f:
     result = {}
@@ -103,7 +103,7 @@ with open(data, "r") as f:
 
     df = pd.DataFrame(result_shaped)
 
-    fig = plt.figure(figsize=(18, 20))
+    fig = plt.figure(figsize=(20, 14))
     fig.tight_layout()
 
     def plot_graph(df, ax, bench):
