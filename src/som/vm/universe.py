@@ -532,7 +532,7 @@ def std_println(msg=""):
 
 
 def main(args):
-    jit.set_param(None, "trace_limit", 15000)
+    # jit.set_param(None, "trace_limit", 15000)
     from som.vm.current import current_universe
 
     u = current_universe
