@@ -536,9 +536,6 @@ def _send_1(method, current_bc_idx, next_bc_idx, stack):
         if isinstance(invokable, BcMethod):
             rcvr_type = receiver.get_class(current_universe)
             method.set_receiver_type(current_bc_idx, rcvr_type)
-            key = rcvr_type, signature
-            if key not in method_cache:
-                method_cache[key] = invokable
 
     if invokable is not None:
         stack.insert(0, invokable.invoke_1(receiver))
@@ -574,9 +571,6 @@ def _send_2(method, current_bc_idx, next_bc_idx, stack):
         if isinstance(invokable, BcMethod):
             rcvr_type = receiver.get_class(current_universe)
             method.set_receiver_type(current_bc_idx, rcvr_type)
-            key = rcvr_type, signature
-            if key not in method_cache:
-                method_cache[key] = invokable
 
     if invokable is not None:
         arg = stack.pop()
@@ -606,9 +600,6 @@ def _send_3(method, current_bc_idx, next_bc_idx, stack):
         if isinstance(invokable, BcMethod):
             rcvr_type = receiver.get_class(current_universe)
             method.set_receiver_type(current_bc_idx, rcvr_type)
-            key = rcvr_type, signature
-            if key not in method_cache:
-                method_cache[key] = invokable
 
     if invokable is not None:
         arg2 = stack.pop()
