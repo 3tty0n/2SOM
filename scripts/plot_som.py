@@ -12,6 +12,9 @@ from scipy.stats import gmean
 
 from pprint import pprint
 
+my_palette = sns.color_palette("Set1")
+sns.set_palette(my_palette)
+
 MACRO = ["NBody", "GraphSearch", "PageRank"]
 MICRO = ["Bounce", "Fannkuch", "Permute", "Queens", "List", "Storage", "Sieve",
          "BubbleSort", "QuickSort", "TreeSort", "Mandelbrot"]
@@ -112,9 +115,9 @@ with open(data, "r") as f:
 
     def plot_graph(df, ax, bench):
         ax.title.set_text(bench)
-        ax.plot(df[bench]["RPySOM-bc-jit-tier1"], label="threaded code", lw=1.5)
-        ax.plot(df[bench]["RPySOM-bc-jit-tier2"], label="tracing JIT", lw=1.5)
-        ax.plot(df[bench]["RPySOM-bc-interp"], label="interpreter", lw=1.5)
+        ax.plot(df[bench]["RPySOM-bc-jit-tier1"], label="threaded code", lw=2)
+        ax.plot(df[bench]["RPySOM-bc-jit-tier2"], label="tracing JIT", lw=2)
+        ax.plot(df[bench]["RPySOM-bc-interp"], label="interpreter", lw=2)
 
     for typ_name, figsize, num in [
             ("macro", (12, 5), 3), ("micro", (18, 7.5), 6), ("tiny", (12, 5), 5)
@@ -138,13 +141,15 @@ with open(data, "r") as f:
             ax.set_box_aspect(1)
             ax.autoscale()
             ax.grid(axis='y', color='gray', lw=1, ls='--')
+            ax.set_ylabel('ms')
+            ax.set_xlabel('#iteration')
 
             axs.append(ax)
             plot_graph(df, ax, bench)
 
 
         handles, labels = axs[0].get_legend_handles_labels()
-        plt.legend(handles, labels, loc='upper left', bbox_to_anchor=(0,-0.15))
+        plt.legend(handles, labels, loc='upper left', bbox_to_anchor=(0,-0.2))
         plt.savefig(name + "_" + typ_name + ".pdf")
         plt.savefig(name + "_" + typ_name + ".png")
         plt.show()
