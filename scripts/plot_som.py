@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import sys
+import math
+from numpy.lib import type_check
 
 import pandas as pd
 import numpy as np
@@ -10,8 +12,13 @@ from scipy.stats import gmean
 
 from pprint import pprint
 
+MACRO = ["NBody", "GraphSearch", "PageRank"]
+MICRO = ["Bounce", "Fannkuch", "Permute", "Queens", "List", "Storage", "Sieve",
+         "BubbleSort", "QuickSort", "TreeSort", "Mandelbrot"]
+TINY = ["Fibonacci", "Dispatch", "Loop", "Recurse", "Sum"]
+
 offset = 30
-invocations = 5
+invocations = 15
 
 def calc_gmean(elapsed_times, offset, n, i):
     times = [elapsed_times[i + offset * j][1] for j in range(n)]
@@ -103,27 +110,41 @@ with open(data, "r") as f:
 
     df = pd.DataFrame(result_shaped)
 
-    fig = plt.figure(figsize=(20, 14))
-    fig.tight_layout()
-
     def plot_graph(df, ax, bench):
         ax.title.set_text(bench)
-        ax.plot(df[bench]["RPySOM-bc-jit-tier1"], label="threaded code")
-        ax.plot(df[bench]["RPySOM-bc-jit-tier2"], label="tracing JIT")
-        ax.plot(df[bench]["RPySOM-bc-interp"], label="interpreter")
+        ax.plot(df[bench]["RPySOM-bc-jit-tier1"], label="threaded code", lw=1.5)
+        ax.plot(df[bench]["RPySOM-bc-jit-tier2"], label="tracing JIT", lw=1.5)
+        ax.plot(df[bench]["RPySOM-bc-interp"], label="interpreter", lw=1.5)
 
-    axs = []
-    for i, bench in enumerate(benchs):
-        import math
+    for typ_name, figsize, num in [
+            ("macro", (12, 5), 3), ("micro", (18, 7.5), 6), ("tiny", (12, 5), 5)
+    ]:
+        fig = plt.figure(figsize=figsize, constrained_layout=True)
+        fig.tight_layout()
 
-        ax = fig.add_subplot(math.floor(len(benchs) / 6) + 1, 6, i + 1)
-        axs.append(ax)
-        # ax.set_ylim(0, 180)
-        plot_graph(df, ax, bench)
+        bench_name = typ_name.upper()
+        benchs = locals().get(bench_name)
 
-    handles, labels = axs[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc=(0.8, 0.1))
+        axs = []
+        for i, bench in enumerate(benchs):
+            if len(benchs) > num:
+                row = math.floor(len(benchs) / num) + 1
+                col = num
+            else:
+                row = math.floor(len(benchs) / num)
+                col = num
+            ax = fig.add_subplot(row, col, i + 1)
 
-    plt.savefig(name + ".pdf")
-    plt.savefig(name + ".png")
-    plt.show()
+            ax.set_box_aspect(1)
+            ax.autoscale()
+            ax.grid(axis='y', color='gray', lw=1, ls='--')
+
+            axs.append(ax)
+            plot_graph(df, ax, bench)
+
+
+        handles, labels = axs[0].get_legend_handles_labels()
+        plt.legend(handles, labels, loc='upper left', bbox_to_anchor=(0,-0.15))
+        plt.savefig(name + "_" + typ_name + ".pdf")
+        plt.savefig(name + "_" + typ_name + ".png")
+        plt.show()
