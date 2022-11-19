@@ -1080,7 +1080,7 @@ def interpret_tier1(method, frame, max_stack_size, dummy=False):
                         stack,
                     )
                 else:
-                    rcvr = stack.take(1, dummy=True)
+                    rcvr = stack.take(0, dummy=True)
                     if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
                         invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
                         new_frame = _create_frame_1(invokable, frame, stack)
@@ -1163,10 +1163,10 @@ def interpret_tier1(method, frame, max_stack_size, dummy=False):
                         stack,
                     )
                 else:
-                    rcvr = stack.take(1, dummy=True)
+                    rcvr = stack.take(2, dummy=True)
                     if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
                         invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
-                        new_frame = _create_frame_2(invokable, frame, stack)
+                        new_frame = _create_frame_3(invokable, frame, stack)
                         new_stack = Stack(16)
                         result = _interpret_CALL_ASSEMBLER(
                             frame=new_frame,
