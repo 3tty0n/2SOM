@@ -92,7 +92,6 @@ calc_trace_length() {
         bm=$1
 
         # "threaded code,ops"
-        # printf "${bm},"
         value=$(grep "^ops" data/"${bm}"_tier1.trace | awk '{print $2}')
         benchs+=( "${bm}" )
         arr_ops_threaded+=( "${value}" )
@@ -102,14 +101,16 @@ calc_trace_length() {
         arr_ops_tracing+=( "${value}" )
     done
 
-    echo "Bench,threaded,tracing"
-    for (( i=0; i < ${#arr_ops_threaded[*]}; ++i ))
-    do
-        bm="${benchs[i]}"
-        ops_threaded="${arr_ops_threaded[i]}"
-        ops_tracing="${arr_ops_tracing[i]}"
-        echo "${bm},${ops_threaded},${ops_tracing}"
-    done
+    {
+        echo "Benchmark,threaded,tracing"
+        for (( i=0; i < ${#arr_ops_threaded[*]}; ++i ))
+        do
+            bm="${benchs[i]}"
+            ops_threaded="${arr_ops_threaded[i]}"
+            ops_tracing="${arr_ops_tracing[i]}"
+            echo "${bm},${ops_threaded},${ops_tracing}"
+        done
+    } > code_size.csv
 }
 
 calc_comp_time() {
@@ -128,16 +129,18 @@ calc_comp_time() {
         arr_comp_time_tracing+=( "${comp_time}" )
     done
 
-    echo "Bench,threaded,tracing"
-    for (( i=0; i < ${#arr_comp_time_threaded[*]}; ++i ))
-    do
-        bm="${benchs[i]}"
-        comp_time_threaded="${arr_comp_time_threaded[i]}"
-        comp_time_tracing="${arr_comp_time_tracing[i]}"
-        echo "${bm},${comp_time_threaded},${comp_time_tracing}"
-    done
+    {
+        echo "Benchmark,threaded,tracing"
+        for (( i=0; i < ${#arr_comp_time_threaded[*]}; ++i ))
+        do
+            bm="${benchs[i]}"
+            comp_time_threaded="${arr_comp_time_threaded[i]}"
+            comp_time_tracing="${arr_comp_time_tracing[i]}"
+            echo "${bm},${comp_time_threaded},${comp_time_tracing}"
+        done
+    } > comp_time.csv
 }
 
 # collect_trace_info
-# calc_trace_length
+calc_trace_length
 calc_comp_time
