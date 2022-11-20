@@ -8,7 +8,8 @@ control_c() {
 trap control_c SIGINT
 
 declare -a macro=("NBody 100" "GraphSearch 2" "PageRank 12")
-declare -a micro=("Fannkuch 5" "Bounce 0" "Permute 0" "Queens 0" "List 0" "Storage 0" "Sieve 0" "BubbleSort 0" "QuickSort 0" "Towers 0" "TreeSort 0" "Mandelbrot 7")
+declare -a micro=("Fannkuch 5" "Bounce 0" "Permute 0" "Queens 0" "List 0" "Storage 0" "Sieve 0" "BubbleSort 0"
+                  "QuickSort 0" "TreeSort 0" "Mandelbrot 7")
 declare -a tiny=("Fibonacci 0" "Dispatch 1" "Loop 0" "Recurse 0" "Sum 0")
 
 collect_send_type_info() {
@@ -81,7 +82,7 @@ collect_trace_info() {
     done
 }
 
-shape_trace_length() {
+calc_trace_length() {
     benchs=()
     arr_ops_threaded=()
     arr_ops_tracing=()
@@ -111,37 +112,32 @@ shape_trace_length() {
     done
 }
 
-count_execution_number_of_slow_path() {
-    echo "Bench,slow_path,total - slow_path,total"
-    for tuple in "${macro[@]}" "${micro[@]}" "${tiny[@]}"
-    do
+calc_comp_time() {
+    benchs=()
+    arr_comp_time_threaded=()
+    arr_comp_time_tracing=()
+    for tuple in "${macro[@]}" "${micro[@]}" "${tiny[@]}"; do
         set -- $tuple
         bm=$1
 
-        slow_paths=$(grep "with 6 ops" -A 2 data/${bm}_tier1.trace | awk '{print $4}' | grep -o -E '[0-9]+')
-        sum_slow_path=0
-        for s in ${slow_paths}; do
-            nums=$(grep ${s} data/${bm}_tier1.trace | grep -o -E '^TargetToken\([0-9]+\):[0-9]+' | awk -F':' '{ printf $NF }')
-            for n in ${nums}; do
-                (( sum_slow_path += n ))
-            done
-        done
+        benchs+=( "${bm}" )
+        comp_time=$(grep "^Tracing\|Backend" data/"${bm}"_tier1.trace | awk '{sum += $3} END {print sum}')
+        arr_comp_time_threaded+=( "${comp_time}" )
 
+        comp_time=$(grep "^Tracing\|Backend" data/"${bm}"_tier2.trace | awk '{sum += $3} END {print sum}')
+        arr_comp_time_tracing+=( "${comp_time}" )
+    done
 
-        entries=$(grep "^entry [0-9]*:[0-9]*" data/${bm}_tier1.trace | awk -F':' '{ print $NF} ')
-        sum_entry=0
-        for entry in $entries; do
-            (( sum_entry += entry ))
-        done
-
-        diff_slow_path_entry=$(( sum_entry - sum_slow_path ))
-
-        echo "${bm},${sum_slow_path},${diff_slow_path_entry},${sum_entry}"
+    echo "Bench,threaded,tracing"
+    for (( i=0; i < ${#arr_comp_time_threaded[*]}; ++i ))
+    do
+        bm="${benchs[i]}"
+        comp_time_threaded="${arr_comp_time_threaded[i]}"
+        comp_time_tracing="${arr_comp_time_tracing[i]}"
+        echo "${bm},${comp_time_threaded},${comp_time_tracing}"
     done
 }
 
-#collect_trace_info
-
-#shape_trace_length
-
-count_execution_number_of_slow_path
+# collect_trace_info
+# calc_trace_length
+calc_comp_time
