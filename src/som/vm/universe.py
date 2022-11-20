@@ -5,6 +5,7 @@ from rlib import jit
 from rlib.string_stream import encode_to_bytes
 from rlib.exit import Exit
 from rlib.osext import path_split
+from rlib.objectmodel import we_are_translated
 from rlib import rgc
 
 from som.vmobjects.array import Array
@@ -539,7 +540,8 @@ def main(args):
     u = current_universe
     u.interpret(args[1:])
 
-    statistics.report()
+    if not we_are_translated():
+        statistics.report()
 
     u.exit(0)
 
