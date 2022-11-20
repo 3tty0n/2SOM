@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import sys
 import math
 from numpy.lib import type_check
@@ -8,20 +7,14 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 import seaborn as sns
-from scipy.stats import gmean
 
-from pprint import pprint
+from pysom_benchmarks import *
 
 my_palette = sns.color_palette("Set1")
 sns.set_palette(my_palette)
 
-MACRO = ["NBody", "GraphSearch", "PageRank"]
-MICRO = ["Bounce", "Fannkuch", "Permute", "Queens", "List", "Storage", "Sieve",
-         "BubbleSort", "QuickSort", "TreeSort", "Mandelbrot"]
-TINY = ["Fibonacci", "Dispatch", "Loop", "Recurse", "Sum"]
-
 offset = 30
-invocations = 15
+invocations = 30
 
 def calc_gmean(elapsed_times, offset, n, i):
     times = [elapsed_times[i + offset * j][1] for j in range(n)]
