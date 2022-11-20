@@ -26,7 +26,7 @@ from som.vmobjects.double import Double
 from som.vmobjects.integer import Integer, int_0, int_1
 
 from rlib import jit
-from rlib.objectmodel import r_dict, compute_hash
+from rlib.objectmodel import r_dict, compute_hash, we_are_translated
 from rlib.jit import (
     promote,
     elidable_promote,
@@ -538,6 +538,7 @@ def _send_1(method, current_bc_idx, next_bc_idx, stack):
             rcvr_type = receiver.get_class(current_universe)
             method.set_receiver_type(current_bc_idx, rcvr_type)
 
+    if not we_are_translated():
         statistics.incr(invokable)
 
     if invokable is not None:
@@ -576,6 +577,7 @@ def _send_2(method, current_bc_idx, next_bc_idx, stack):
             rcvr_type = receiver.get_class(current_universe)
             method.set_receiver_type(current_bc_idx, rcvr_type)
 
+    if not we_are_translated():
         statistics.incr(invokable)
 
     if invokable is not None:
@@ -608,6 +610,7 @@ def _send_3(method, current_bc_idx, next_bc_idx, stack):
             rcvr_type = receiver.get_class(current_universe)
             method.set_receiver_type(current_bc_idx, rcvr_type)
 
+    if not we_are_translated():
         statistics.incr(invokable)
 
     if invokable is not None:
