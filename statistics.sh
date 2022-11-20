@@ -12,6 +12,10 @@ declare -a micro=("Fannkuch 5" "Bounce 0" "Permute 0" "Queens 0" "List 0" "Stora
                   "QuickSort 0" "TreeSort 0" "Mandelbrot 7")
 declare -a tiny=("Fibonacci 0" "Dispatch 1" "Loop 0" "Recurse 0" "Sum 0")
 
+_print_header() {
+    echo "Benchmark,threaded code,tracing JIT"
+}
+
 collect_send_type_info() {
     echo "Benchmark,Primitive sends,Trivial sends,BcMethod sends"
 
@@ -68,6 +72,8 @@ collect_trace_info() {
 
         if [ ${bm} = "Sum" ] || [ ${bm} = "Sieve" ]; then
             THRESHOLD=23
+        elif [ ${bm} = "Mandelbrot" ]; then
+            THRESHOLD=27
         elif [ ${bm} = "Dispatch" ]; then
             THRESHOLD=2
         else
@@ -102,7 +108,7 @@ calc_trace_length() {
     done
 
     {
-        echo "Benchmark,threaded,tracing"
+        _print_header
         for (( i=0; i < ${#arr_ops_threaded[*]}; ++i ))
         do
             bm="${benchs[i]}"
@@ -130,7 +136,7 @@ calc_comp_time() {
     done
 
     {
-        echo "Benchmark,threaded,tracing"
+        _print_header
         for (( i=0; i < ${#arr_comp_time_threaded[*]}; ++i ))
         do
             bm="${benchs[i]}"
@@ -141,6 +147,6 @@ calc_comp_time() {
     } > comp_time.csv
 }
 
-# collect_trace_info
+collect_trace_info
 calc_trace_length
 calc_comp_time
