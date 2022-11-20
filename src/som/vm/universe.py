@@ -534,9 +534,13 @@ def std_println(msg=""):
 def main(args):
     jit.set_param(None, "trace_limit", 15000)
     from som.vm.current import current_universe
+    from som.statistics import statistics
 
     u = current_universe
     u.interpret(args[1:])
+
+    statistics.report()
+
     u.exit(0)
 
 

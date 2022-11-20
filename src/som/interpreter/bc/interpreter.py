@@ -525,6 +525,7 @@ def _create_frame_3(invokable, frame, stack):
 def _send_1(method, current_bc_idx, next_bc_idx, stack):
     from som.vmobjects.method_bc import BcMethod
     from som.vm.current import current_universe
+    from som.statistics import statistics
 
     signature = method.get_constant(current_bc_idx)
     receiver = stack.top()
@@ -536,6 +537,8 @@ def _send_1(method, current_bc_idx, next_bc_idx, stack):
         if isinstance(invokable, BcMethod):
             rcvr_type = receiver.get_class(current_universe)
             method.set_receiver_type(current_bc_idx, rcvr_type)
+
+        statistics.incr(invokable)
 
     if invokable is not None:
         stack.insert(0, invokable.invoke_1(receiver))
@@ -558,6 +561,7 @@ def _send_1(method, current_bc_idx, next_bc_idx, stack):
 def _send_2(method, current_bc_idx, next_bc_idx, stack):
     from som.vmobjects.method_bc import BcMethod, BcMethodNLR
     from som.vm.current import current_universe
+    from som.statistics import statistics
 
     # print current_bc_idx, next_bc_idx; stack.dump()
 
@@ -571,6 +575,8 @@ def _send_2(method, current_bc_idx, next_bc_idx, stack):
         if isinstance(invokable, BcMethod):
             rcvr_type = receiver.get_class(current_universe)
             method.set_receiver_type(current_bc_idx, rcvr_type)
+
+        statistics.incr(invokable)
 
     if invokable is not None:
         arg = stack.pop()
@@ -590,6 +596,7 @@ def _send_2(method, current_bc_idx, next_bc_idx, stack):
 def _send_3(method, current_bc_idx, next_bc_idx, stack):
     from som.vmobjects.method_bc import BcMethod
     from som.vm.current import current_universe
+    from som.statistics import statistics
 
     signature = method.get_constant(current_bc_idx)
     receiver = stack.take(2)
@@ -600,6 +607,8 @@ def _send_3(method, current_bc_idx, next_bc_idx, stack):
         if isinstance(invokable, BcMethod):
             rcvr_type = receiver.get_class(current_universe)
             method.set_receiver_type(current_bc_idx, rcvr_type)
+
+        statistics.incr(invokable)
 
     if invokable is not None:
         arg2 = stack.pop()
@@ -619,6 +628,7 @@ def _send_3(method, current_bc_idx, next_bc_idx, stack):
 @enable_shallow_tracing_argn(2)
 def _send_n(method, current_bc_idx, next_bc_idx, stack):
     from som.vm.current import current_universe
+    from som.statistics import statistics
 
     signature = method.get_constant(current_bc_idx)
     receiver = stack.items[
@@ -627,6 +637,10 @@ def _send_n(method, current_bc_idx, next_bc_idx, stack):
 
     layout = receiver.get_object_layout(current_universe)
     invokable = _lookup(layout, signature, method, current_bc_idx)
+
+    if not we_are_jitted():
+        statistics.incr(invokable)
+
     if invokable is not None:
         stack.stack_ptr = invokable.invoke_n(stack.items, stack.stack_ptr)
     elif not layout.is_latest:
