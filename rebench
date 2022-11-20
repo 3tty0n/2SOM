@@ -3,5 +3,4 @@
 L3_SIZE_VALUE="$(lscpu | grep L3 | awk '{print $3}')"
 L3_SIZE="${L3_SIZE_VALUE}"M
 
-
-PYPY_GC_NURSERY=${L3_SIZE} rebench "$@"
+PYPY_GC_MAX=2G PYPY_GC_NURSERY=${L3_SIZE} rebench "$@"
