@@ -36,11 +36,12 @@ from rlib.jit import (
 )
 
 
-TRACE_THRESHOLD = 10
+TRACE_THRESHOLD = 50
 
 
 class ContinueInTier1(Exception):
     def __init__(self, method, frame, items, stack_ptr, bytecode_index):
+        assert method is not None
         self.method = method
         self.frame = frame
         self.items = items
@@ -50,6 +51,7 @@ class ContinueInTier1(Exception):
 
 class ContinueInTier2(Exception):
     def __init__(self, method, frame, stack, bytecode_index):
+        assert method is not None
         self.method = method
         self.frame = frame
         self.stack = stack
@@ -904,24 +906,14 @@ def interpret(method, frame, max_stack_size, dummy=False):
                 w_result = interpret_tier1(method, frame, max_stack_size, current_bc_idx)
                 return w_result
             except ContinueInTier2 as e:
-                print "continue in tracing", e.method, e.bytecode_index
-
+                assert e.method is not None
                 method = e.method
                 frame = e.frame
                 stack = e.stack
                 current_bc_idx = e.bytecode_index
 
-            try:
-                w_result = interpret_tier2(method, frame, max_stack_size, current_bc_idx, stack.items, stack.stack_ptr)
-                return w_result
-            except ContinueInTier1 as e:
-                method = e.method
-                frame = e.frame
-                stack = e.stack
-                stack = Stack(max_stack_size)
-                stack.items = e.items
-                stack.stack_ptr = e.stack_ptr
-                current_bc_idx = e.bytecode_index
+            w_result = interpret_tier2(method, frame, max_stack_size, current_bc_idx, stack.items, stack.stack_ptr)
+            return w_result
 
     # if is_tier1():
     #     return interpret_tier1(method, frame, max_stack_size)
@@ -962,9 +954,6 @@ def interpret_tier1(method, frame, max_stack_size, current_bc_idx=0, stack=None,
             stack=stack,
             tstack=tstack,
         )
-
-        if we_are_jitted():
-            _set_method_cache(frame, method, current_universe)
 
         bytecode = method.get_bytecode(current_bc_idx)
 
@@ -1224,7 +1213,6 @@ def interpret_tier1(method, frame, max_stack_size, current_bc_idx=0, stack=None,
         elif bytecode == Bytecodes.return_local:
             if we_are_jitted():
                 if tstack.t_is_empty():
-                    _set_method_cache(frame, method, current_universe)
                     ret_object = _return_local(stack, dummy=True)
                     next_bc_idx = emit_ret(entry_bc_idx, ret_object)
                     tier1jitdriver.can_enter_jit(
@@ -1245,7 +1233,6 @@ def interpret_tier1(method, frame, max_stack_size, current_bc_idx=0, stack=None,
         elif bytecode == Bytecodes.return_non_local:
             if we_are_jitted():
                 if tstack.t_is_empty():
-                    _set_method_cache(frame, method, current_universe)
                     val = stack.top()
                     ret_object = _do_return_non_local(
                         val, frame, method.get_bytecode(current_bc_idx + 1)
@@ -1358,7 +1345,7 @@ def interpret_tier1(method, frame, max_stack_size, current_bc_idx=0, stack=None,
         elif bytecode == Bytecodes.jump_backward:
             target_bc_idx = current_bc_idx - method.get_bytecode(current_bc_idx + 1)
 
-            if method.get_count(current_bc_idx) > TRACE_THRESHOLD:
+            if method._counts[current_bc_idx] > TRACE_THRESHOLD:
                 raise ContinueInTier2(method, frame, stack, current_bc_idx)
             method.incr_count(current_bc_idx)
 
