@@ -257,11 +257,11 @@ def _interp_with_nlr(method, new_frame, max_stack_size):
 
 
 class BcMethod(BcAbstractMethod):
-    def invoke_1(self, rcvr):
+    def invoke_1(self, rcvr, ctx=None):
         new_frame = create_frame_1(rcvr, self._size_frame, self._size_inner)
         return interpret(self, new_frame, self._maximum_number_of_stack_elements)
 
-    def invoke_2(self, rcvr, arg1):
+    def invoke_2(self, rcvr, arg1, ctx=None):
         new_frame = create_frame_2(
             rcvr,
             arg1,
@@ -271,7 +271,7 @@ class BcMethod(BcAbstractMethod):
         )
         return interpret(self, new_frame, self._maximum_number_of_stack_elements)
 
-    def invoke_3(self, rcvr, arg1, arg2):
+    def invoke_3(self, rcvr, arg1, arg2, ctx=None):
         new_frame = create_frame_3(
             self._arg_inner_access,
             self._size_frame,
@@ -282,7 +282,7 @@ class BcMethod(BcAbstractMethod):
         )
         return interpret(self, new_frame, self._maximum_number_of_stack_elements)
 
-    def invoke_n(self, stack, stack_ptr):
+    def invoke_n(self, stack, stack_ptr, ctx=None):
         new_frame = create_frame(
             self._arg_inner_access,
             self._size_frame,
@@ -669,11 +669,11 @@ class _BackJumpPatch(HeapEntry):
 
 
 class BcMethodNLR(BcMethod):
-    def invoke_1(self, rcvr):
+    def invoke_1(self, rcvr, ctx=None):
         new_frame = create_frame_1(rcvr, self._size_frame, self._size_inner)
         return _interp_with_nlr(self, new_frame, self._maximum_number_of_stack_elements)
 
-    def invoke_2(self, rcvr, arg1):
+    def invoke_2(self, rcvr, arg1, ctx=None):
         new_frame = create_frame_2(
             rcvr,
             arg1,
@@ -683,7 +683,7 @@ class BcMethodNLR(BcMethod):
         )
         return _interp_with_nlr(self, new_frame, self._maximum_number_of_stack_elements)
 
-    def invoke_3(self, rcvr, arg1, arg2):
+    def invoke_3(self, rcvr, arg1, arg2, ctx=None):
         new_frame = create_frame_3(
             self._arg_inner_access,
             self._size_frame,
@@ -694,7 +694,7 @@ class BcMethodNLR(BcMethod):
         )
         return _interp_with_nlr(self, new_frame, self._maximum_number_of_stack_elements)
 
-    def invoke_n(self, stack, stack_ptr):
+    def invoke_n(self, stack, stack_ptr, ctx=None):
         new_frame = create_frame(
             self._arg_inner_access,
             self._size_frame,

@@ -29,3 +29,18 @@ def is_tier1():
 @jit.elidable
 def is_tier2():
     return _INTERP_TYPE == _BC
+
+
+class _TierManager(object):
+
+    _CURRENT_TIER = 1
+
+    def set_tier(self, tier):
+        self._CURRENT_TIER = tier
+
+
+    def tier_gt(self, val):
+        return self._CURRENT_TIER > val
+
+
+tier_manager = _TierManager()

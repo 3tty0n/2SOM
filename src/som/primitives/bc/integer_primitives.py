@@ -62,7 +62,7 @@ def _to_do_int(i, by_increment, top, block, block_method):
     assert isinstance(i, int)
     assert isinstance(top, int)
     while i <= top:
-        jitdriver_int.jit_merge_point(block_method=block_method)
+        # jitdriver_int.jit_merge_point(block_method=block_method)
 
         block_method.invoke_2(block, Integer(i))
         i += by_increment
@@ -72,7 +72,7 @@ def _to_do_double(i, by_increment, top, block, block_method):
     assert isinstance(i, int)
     assert isinstance(top, float)
     while i <= top:
-        jitdriver_double.jit_merge_point(block_method=block_method)
+        # jitdriver_double.jit_merge_point(block_method=block_method)
 
         block_method.invoke_2(block, Integer(i))
         i += by_increment
@@ -132,7 +132,7 @@ def _down_to_do_int(i, by_increment, bottom, block, block_method):
     assert isinstance(i, int)
     assert isinstance(bottom, int)
     while i >= bottom:
-        jitdriver_int_down.jit_merge_point(block_method=block_method)
+        # jitdriver_int_down.jit_merge_point(block_method=block_method)
 
         block_method.invoke_2(block, Integer(i))
         i -= by_increment
@@ -142,7 +142,7 @@ def _down_to_do_double(i, by_increment, bottom, block, block_method):
     assert isinstance(i, int)
     assert isinstance(bottom, float)
     while i >= bottom:
-        jitdriver_double_down.jit_merge_point(block_method=block_method)
+        # jitdriver_double_down.jit_merge_point(block_method=block_method)
 
         block_method.invoke_2(block, Integer(i))
         i -= by_increment
