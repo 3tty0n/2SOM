@@ -18,7 +18,7 @@ from som.interpreter.bc.frame import (
 from som.interpreter.bc.traverse_stack import t_empty, t_dump, t_push
 from som.interpreter.control_flow import ReturnException
 from som.interpreter.send import lookup_and_send_2, lookup_and_send_3
-from som.tier_type import is_tier1
+from som.tier_type import is_tier1, is_tier2
 from som.vm.globals import nilObject, trueObject, falseObject
 from som.vmobjects.array import Array
 from som.vmobjects.block_bc import BcBlock
@@ -36,46 +36,24 @@ from rlib.jit import (
 )
 
 
-class MethodCache(object):
-    def __init__(self, cache={}):
-        self.cache = cache
-
-    def __setitem__(self, key, val):
-        self.cache[key] = val
-
-    def __getitem__(self, key):
-        return self.cache[key]
-
-    def __contains__(self, key):
-        return key in self.cache
-
-    @jit.not_in_trace
-    def dump(self):
-        s = "{"
-        for k in self.cache.keys():
-            s += str(k[1].getstr()) + ": " + str(self.cache[k]) + ","
-        s += "}"
-        print s
+TRACE_THRESHOLD = 10
 
 
-method_cache = MethodCache()
+class ContinueInTier1(Exception):
+    def __init__(self, method, frame, items, stack_ptr, bytecode_index):
+        self.method = method
+        self.frame = frame
+        self.items = items
+        self.stack_ptr = stack_ptr
+        self.bytecode_index = bytecode_index
 
 
-@jit.not_in_trace
-def _set_method_cache(frame, method, current_universe, dummy=False):
-    from som.vmobjects.method_bc import BcMethod
-    from som.vmobjects.object_without_fields import ObjectWithoutFields
-
-    if not isinstance(method, BcMethod):
-        return
-
-    rcvr = read_frame(frame, FRAME_AND_INNER_RCVR_IDX)
-    rcvr_type = rcvr.get_class(current_universe)
-
-    signature = method._signature
-    key = rcvr_type, signature
-    if not key in method_cache:
-        method_cache[key] = method
+class ContinueInTier2(Exception):
+    def __init__(self, method, frame, stack, bytecode_index):
+        self.method = method
+        self.frame = frame
+        self.stack = stack
+        self.bytecode_index = bytecode_index
 
 
 def _lookup_invokable(receiver_type, current_bc_idx, method):
@@ -915,23 +893,52 @@ def _interp_with_nlr(method, new_frame, max_stack_size, dummy=False):
 def interpret(method, frame, max_stack_size, dummy=False):
     if dummy:
         return
-    if is_tier1():
-        return interpret_tier1(method, frame, max_stack_size)
+
+    if is_tier2():
+        result = interpret_tier2(method, frame, max_stack_size)
+        return result
     else:
-        return interpret_tier2(method, frame, max_stack_size)
+        current_bc_idx = 0
+        while True:
+            try:
+                w_result = interpret_tier1(method, frame, max_stack_size, current_bc_idx)
+                return w_result
+            except ContinueInTier2 as e:
+                print "continue in tracing", e.method, e.bytecode_index
+
+                method = e.method
+                frame = e.frame
+                stack = e.stack
+                current_bc_idx = e.bytecode_index
+
+            try:
+                w_result = interpret_tier2(method, frame, max_stack_size, current_bc_idx, stack.items, stack.stack_ptr)
+                return w_result
+            except ContinueInTier1 as e:
+                method = e.method
+                frame = e.frame
+                stack = e.stack
+                stack = Stack(max_stack_size)
+                stack.items = e.items
+                stack.stack_ptr = e.stack_ptr
+                current_bc_idx = e.bytecode_index
+
+    # if is_tier1():
+    #     return interpret_tier1(method, frame, max_stack_size)
+    # else:
+    #     return interpret_tier2(method, frame, max_stack_size)
 
 
 @jit.unroll_safe
-def interpret_tier1(method, frame, max_stack_size, dummy=False):
+def interpret_tier1(method, frame, max_stack_size, current_bc_idx=0, stack=None, dummy=False):
     from som.vm.current import current_universe
     from som.vmobjects.method_bc import BcMethod
 
     if dummy:
         return
 
-    current_bc_idx = 0
-
-    stack = Stack(max_stack_size)
+    if not stack:
+        stack = Stack(max_stack_size)
 
     tstack = t_empty()
     entry_bc_idx = 0
@@ -1351,6 +1358,10 @@ def interpret_tier1(method, frame, max_stack_size, dummy=False):
         elif bytecode == Bytecodes.jump_backward:
             target_bc_idx = current_bc_idx - method.get_bytecode(current_bc_idx + 1)
 
+            if method.get_count(current_bc_idx) > TRACE_THRESHOLD:
+                raise ContinueInTier2(method, frame, stack, current_bc_idx)
+            method.incr_count(current_bc_idx)
+
             if we_are_jitted():
                 if tstack.t_is_empty():
                     next_bc_idx = emit_jump(entry_bc_idx, target_bc_idx)
@@ -1533,13 +1544,12 @@ def interpret_tier1(method, frame, max_stack_size, dummy=False):
 
 
 @jit.unroll_safe
-def interpret_tier2(method, frame, max_stack_size):
+def interpret_tier2(method, frame, max_stack_size, current_bc_idx=0, stack=None, stack_ptr=-1):
     from som.vm.current import current_universe
 
-    current_bc_idx = 0
-
-    stack_ptr = -1
-    stack = [None] * max_stack_size
+    if not stack:
+        stack_ptr = -1
+        stack = [None] * max_stack_size
 
     while True:
         jitdriver.jit_merge_point(

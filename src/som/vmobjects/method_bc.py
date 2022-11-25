@@ -85,6 +85,8 @@ class BcAbstractMethod(AbstractMethod):
         self._selectors = [None] * num_bytecodes
         self._invokable = [None] * num_bytecodes
 
+        self._counts = [0] * num_bytecodes
+
         self._literals = literals
 
         self._number_of_arguments = signature.get_number_of_signature_arguments()
@@ -231,6 +233,13 @@ class BcAbstractMethod(AbstractMethod):
     def has_invokable(self, bytecode_index):
         return self._invokable[bytecode_index] is not None
 
+    def get_count(self, bytecode_index):
+        assert 0 <= bytecode_index < len(self._counts)
+        return self._counts
+
+    def incr_count(self, bytecode_index):
+        assert 0 <= bytecode_index < len(self._counts)
+        self._counts[bytecode_index] += 1
 
 
 def _interp_with_nlr(method, new_frame, max_stack_size):
