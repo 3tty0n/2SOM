@@ -4,6 +4,7 @@ from som.primitives.integer_primitives import IntegerPrimitivesBase as _Base
 from som.vmobjects.double import Double
 from som.vmobjects.integer import Integer
 from som.vmobjects.primitive import Primitive, TernaryPrimitive
+from som.tier_type import is_tier1, is_tier2, is_hybrid
 
 
 def get_printable_location_up(block_method):
@@ -64,7 +65,10 @@ def _to_do_int(i, by_increment, top, block, block_method):
     while i <= top:
         # jitdriver_int.jit_merge_point(block_method=block_method)
 
-        block_method.invoke_2(block, Integer(i))
+        if is_tier1():
+            block_method.invoke_2(block, Integer(i))
+        else:
+            block_method.invoke_2_tier2(block, Integer(i))
         i += by_increment
 
 
@@ -74,7 +78,10 @@ def _to_do_double(i, by_increment, top, block, block_method):
     while i <= top:
         # jitdriver_double.jit_merge_point(block_method=block_method)
 
-        block_method.invoke_2(block, Integer(i))
+        if is_tier1():
+            block_method.invoke_2(block, Integer(i))
+        else:
+            block_method.invoke_2_tier2(block, Integer(i))
         i += by_increment
 
 
@@ -134,7 +141,10 @@ def _down_to_do_int(i, by_increment, bottom, block, block_method):
     while i >= bottom:
         # jitdriver_int_down.jit_merge_point(block_method=block_method)
 
-        block_method.invoke_2(block, Integer(i))
+        if is_tier1():
+            block_method.invoke_2(block, Integer(i))
+        else:
+            block_method.invoke_2_tier2(block, Integer(i))
         i -= by_increment
 
 
@@ -144,7 +154,10 @@ def _down_to_do_double(i, by_increment, bottom, block, block_method):
     while i >= bottom:
         # jitdriver_double_down.jit_merge_point(block_method=block_method)
 
-        block_method.invoke_2(block, Integer(i))
+        if is_tier1():
+            block_method.invoke_2(block, Integer(i))
+        else:
+            block_method.invoke_2_tier2(block, Integer(i))
         i -= by_increment
 
 
