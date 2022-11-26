@@ -4,9 +4,11 @@
 import os
 import sys
 
+from rpython.rlib.rsre import rsre_re as re
+
 from som.compiler.parse_error import ParseError
 from som.interp_type import is_ast_interpreter, is_bytecode_interpreter
-from som.tier_type import is_hybrid, is_tier1, is_tier2
+from som.tier_type import is_hybrid, is_tier1, is_tier2, tier_manager
 from som.vm.universe import main, Exit
 
 try:
@@ -30,8 +32,13 @@ def entry_point(argv):
                 print("missing argument after --jit")
                 return 2
             jitarg = argv[i + 1]
-            del argv[i : i + 2]
             jit.set_user_param(None, jitarg)
+            del argv[i : i + 2]
+            continue
+        elif argv[i] == '--hybrid_threshold':
+            jitvalue = argv[i + 1]
+            tier_manager.set_threshold(int(jitvalue))
+            del argv[i : i + 2]
             continue
         i += 1
 
