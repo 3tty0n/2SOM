@@ -17,8 +17,8 @@ from som.interpreter.bc.frame import (
 )
 from som.interpreter.bc.traverse_stack import t_empty, t_dump, t_push
 from som.interpreter.control_flow import ReturnException
-from som.interpreter.send import lookup_and_send_2, lookup_and_send_3
-from som.tier_type import is_tier1, is_tier2, tier_manager
+from som.interpreter.send import lookup_and_send_2, lookup_and_send_3, lookup_and_send_2_tier2, lookup_and_send_3_tier2
+from som.tier_type import is_hybrid, is_tier1, is_tier2, tier_manager
 from som.vm.globals import nilObject, trueObject, falseObject
 from som.vmobjects.array import Array
 from som.vmobjects.block_bc import BcBlock
@@ -36,7 +36,7 @@ from rlib.jit import (
 )
 
 
-TRACE_THRESHOLD = 2 ** 31 / 2
+TRACE_THRESHOLD = 1039
 
 
 class ContinueInTier1(Exception):
@@ -457,7 +457,7 @@ def _interpret_CALL_ASSEMBLER(
 ):
     # if dummy:
     #     return
-    return interpret_tier1(method, frame, 8, dummy)
+    return interpret_tier1(method, frame, 8, dummy=dummy)
 
 
 @enable_shallow_tracing
@@ -896,10 +896,13 @@ def interpret(method, frame, max_stack_size, dummy=False):
     if dummy:
         return
 
-    if is_tier2():
+    if is_tier1():
+        w_result = interpret_tier1(method, frame, max_stack_size)
+        return w_result
+    elif is_tier2():
         result = interpret_tier2(method, frame, max_stack_size)
         return result
-    else:
+    elif is_hybrid():
         current_bc_idx = 0
         while True:
             try:
@@ -923,6 +926,8 @@ def interpret(method, frame, max_stack_size, dummy=False):
                 stack.stack_ptr,
             )
             return w_result
+    else:
+        assert False, "unreached tier"
 
     # if is_tier1():
     #     return interpret_tier1(method, frame, max_stack_size)
@@ -1356,6 +1361,11 @@ def interpret_tier1(
         elif bytecode == Bytecodes.jump_backward:
             target_bc_idx = current_bc_idx - method.get_bytecode(current_bc_idx + 1)
 
+            if is_hybrid():
+                if method._counts[current_bc_idx] > TRACE_THRESHOLD and tstack.t_is_empty():
+                    raise ContinueInTier2(method, frame, stack, current_bc_idx)
+                method.incr_count(current_bc_idx)
+
             if we_are_jitted():
                 if tstack.t_is_empty():
                     next_bc_idx = emit_jump(entry_bc_idx, target_bc_idx)
@@ -1371,9 +1381,6 @@ def interpret_tier1(
                     next_bc_idx, tstack = tstack.t_pop()
                     next_bc_idx = emit_jump(next_bc_idx, target_bc_idx)
             else:
-                # if method._counts[current_bc_idx] > TRACE_THRESHOLD:
-                #     raise ContinueInTier2(method, frame, stack, current_bc_idx)
-                method.incr_count(current_bc_idx)
                 next_bc_idx = entry_bc_idx = target_bc_idx
 
         elif bytecode == Bytecodes.jump_if_greater:
@@ -1489,6 +1496,11 @@ def interpret_tier1(
                 + (method.get_bytecode(current_bc_idx + 2) << 8)
             )
 
+            if is_hybrid():
+                if method._counts[current_bc_idx] > TRACE_THRESHOLD and tstack.t_is_empty():
+                    raise ContinueInTier2(method, frame, stack, current_bc_idx)
+                method.incr_count(current_bc_idx)
+
             if we_are_jitted():
                 if tstack.t_is_empty():
                     next_bc_idx = emit_jump(entry_bc_idx, target_bc_idx)
@@ -1542,9 +1554,12 @@ def interpret_tier1(
 
 @jit.unroll_safe
 def interpret_tier2(
-    method, frame, max_stack_size, current_bc_idx=0, stack=None, stack_ptr=-1
+    method, frame, max_stack_size, current_bc_idx=0, stack=None, stack_ptr=-1, dummy=False
 ):
     from som.vm.current import current_universe
+
+    if dummy:
+        return
 
     if not stack:
         stack_ptr = -1
@@ -1687,7 +1702,7 @@ def interpret_tier2(
             if glob:
                 stack[stack_ptr] = glob
             else:
-                stack[stack_ptr] = lookup_and_send_2(
+                stack[stack_ptr] = lookup_and_send_2_tier2(
                     get_self_dynamically(frame), global_name, "unknownGlobal:"
                 )
 
@@ -1811,7 +1826,7 @@ def interpret_tier2(
             layout = receiver.get_object_layout(current_universe)
             invokable = _lookup(layout, signature, method, current_bc_idx)
             if invokable is not None:
-                stack[stack_ptr] = invokable.invoke_1(receiver)
+                stack[stack_ptr] = invokable.invoke_1_tier2(receiver)
             elif not layout.is_latest:
                 _update_object_and_invalidate_old_caches(
                     receiver, method, current_bc_idx, current_universe
@@ -1833,7 +1848,7 @@ def interpret_tier2(
                 if we_are_jitted():
                     stack[stack_ptr] = None
                 stack_ptr -= 1
-                stack[stack_ptr] = invokable.invoke_2(receiver, arg)
+                stack[stack_ptr] = invokable.invoke_2_tier2(receiver, arg)
             elif not layout.is_latest:
                 _update_object_and_invalidate_old_caches(
                     receiver, method, current_bc_idx, current_universe
@@ -1859,7 +1874,7 @@ def interpret_tier2(
                     stack[stack_ptr - 1] = None
 
                 stack_ptr -= 2
-                stack[stack_ptr] = invokable.invoke_3(receiver, arg1, arg2)
+                stack[stack_ptr] = invokable.invoke_3_tier2(receiver, arg1, arg2)
             elif not layout.is_latest:
                 _update_object_and_invalidate_old_caches(
                     receiver, method, current_bc_idx, current_universe
@@ -1879,7 +1894,7 @@ def interpret_tier2(
             layout = receiver.get_object_layout(current_universe)
             invokable = _lookup(layout, signature, method, current_bc_idx)
             if invokable is not None:
-                stack_ptr = invokable.invoke_n(stack, stack_ptr)
+                stack_ptr = invokable.invoke_n_tier2(stack, stack_ptr)
             elif not layout.is_latest:
                 _update_object_and_invalidate_old_caches(
                     receiver, method, current_bc_idx, current_universe
@@ -2272,7 +2287,7 @@ def _send_does_not_understand_tier2(receiver, selector, stack, stack_ptr):
         arguments_array.set_indexable_field(i, value)
         i -= 1
 
-    stack[stack_ptr] = lookup_and_send_3(
+    stack[stack_ptr] = lookup_and_send_3_tier2(
         receiver, selector, arguments_array, "doesNotUnderstand:arguments:"
     )
 

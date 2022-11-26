@@ -71,6 +71,10 @@ class _BcPrimitive(_AbstractPrimitive):
         prim_fn = self._prim_fn
         return prim_fn(self, stack, stack_ptr)
 
+    def invoke_n_tier2(self, stack, stack_ptr, ctx=None):
+        prim_fn = self._prim_fn
+        return prim_fn(self, stack, stack_ptr)
+
     def get_number_of_signature_arguments(self):
         return self._signature.get_number_of_signature_arguments()
 
@@ -83,6 +87,10 @@ class UnaryPrimitive(_AbstractPrimitive):
         self._prim_fn = prim_fn
 
     def invoke_1(self, rcvr, ctx=None):
+        prim_fn = self._prim_fn
+        return prim_fn(rcvr)
+
+    def invoke_1_tier2(self, rcvr, ctx=None):
         prim_fn = self._prim_fn
         return prim_fn(rcvr)
 
@@ -101,6 +109,10 @@ class BinaryPrimitive(_AbstractPrimitive):
         prim_fn = self._prim_fn
         return prim_fn(rcvr, arg)
 
+    def invoke_2_tier2(self, rcvr, arg, ctx=None):
+        prim_fn = self._prim_fn
+        return prim_fn(rcvr, arg)
+
     def get_number_of_signature_arguments(self):  # pylint: disable=no-self-use
         return 2
 
@@ -113,6 +125,10 @@ class TernaryPrimitive(_AbstractPrimitive):
         self._prim_fn = prim_fn
 
     def invoke_3(self, rcvr, arg1, arg2, ctx=None):
+        prim_fn = self._prim_fn
+        return prim_fn(rcvr, arg1, arg2)
+
+    def invoke_3_tier2(self, rcvr, arg1, arg2, ctx=None):
         prim_fn = self._prim_fn
         return prim_fn(rcvr, arg1, arg2)
 
