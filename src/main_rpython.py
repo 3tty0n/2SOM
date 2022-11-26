@@ -6,7 +6,7 @@ import sys
 
 from som.compiler.parse_error import ParseError
 from som.interp_type import is_ast_interpreter, is_bytecode_interpreter
-from som.tier_type import is_tier1, is_tier2
+from som.tier_type import is_hybrid, is_tier1, is_tier2
 from som.vm.universe import main, Exit
 
 try:
@@ -66,6 +66,8 @@ def target(driver, _args):
         exe_name += "tier1"
     elif is_tier2():
         exe_name += "tier2"
+    elif is_hybrid():
+        exe_name += "hybrid"
 
     driver.exe_name = exe_name
     return entry_point, None
