@@ -57,7 +57,7 @@ def _do_indexes(rcvr, block):
     i = 1
     length = rcvr.get_number_of_indexable_fields()
     while i <= length:  # the i is propagated to Smalltalk, so, start with 1
-        do_index_driver.jit_merge_point(block_method=block_method)
+        # do_index_driver.jit_merge_point(block_method=block_method)
         block_method.invoke_2(block, Integer(i))
         i += 1
 
@@ -80,7 +80,7 @@ def _do(rcvr, block):
     i = 0
     length = rcvr.get_number_of_indexable_fields()
     while i < length:  # the array itself is zero indexed
-        do_driver.jit_merge_point(block_method=block_method)
+        # do_driver.jit_merge_point(block_method=block_method)
         block_method.invoke_2(block, rcvr.get_indexable_field(i))
         i += 1
 

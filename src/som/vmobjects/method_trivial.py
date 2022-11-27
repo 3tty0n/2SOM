@@ -7,7 +7,7 @@ from som.compiler.bc.bytecode_generator import (
 from som.interp_type import is_ast_interpreter
 from som.interpreter.ast.frame import FRAME_AND_INNER_RCVR_IDX
 from som.interpreter.bc.frame import stack_pop_old_arguments_and_push_result
-from som.interpreter.send import lookup_and_send_2
+from som.interpreter.send import lookup_and_send_2, lookup_and_send_2_tier2
 
 from som.vmobjects.method import AbstractMethod
 
@@ -51,16 +51,33 @@ class LiteralReturn(AbstractTrivialMethod):
         if isinstance(self._value, AbstractMethod):
             self._value.set_holder(value)
 
-    def invoke_1(self, _rcvr):
+    def invoke_1(self, _rcvr, ctx=None):
         return self._value
 
-    def invoke_2(self, _rcvr, _arg1):
+    def invoke_1_tier2(self, _rcvr, ctx=None):
         return self._value
 
-    def invoke_3(self, _rcvr, _arg1, _arg2):
+    def invoke_2(self, _rcvr, _arg1, ctx=None):
         return self._value
 
-    def invoke_n(self, stack, stack_ptr):
+    def invoke_2_tier2(self, _rcvr, _arg1, ctx=None):
+        return self._value
+
+    def invoke_3(self, _rcvr, _arg1, _arg2, ctx=None):
+        return self._value
+
+    def invoke_3_tier2(self, _rcvr, _arg1, _arg2, ctx=None):
+        return self._value
+
+    def invoke_n(self, stack, stack_ptr, ctx=None):
+        return stack_pop_old_arguments_and_push_result(
+            stack,
+            stack_ptr,
+            self._signature.get_number_of_signature_arguments(),
+            self._value,
+        )
+
+    def invoke_n_tier2(self, stack, stack_ptr, ctx=None):
         return stack_pop_old_arguments_and_push_result(
             stack,
             stack_ptr,
@@ -95,7 +112,7 @@ class GlobalRead(AbstractTrivialMethod):
 
         self.universe = universe
 
-    def invoke_1(self, rcvr):
+    def invoke_1(self, rcvr, ctx=None):
         if self._assoc is not None:
             return self._assoc.value
 
@@ -109,16 +126,47 @@ class GlobalRead(AbstractTrivialMethod):
             "unknownGlobal:",
         )
 
-    def invoke_2(self, rcvr, _arg1):
+    def invoke_1_tier2(self, rcvr, ctx=None):
+        if self._assoc is not None:
+            return self._assoc.value
+
+        if self.universe.has_global(self._global_name):
+            self._assoc = self.universe.get_globals_association(self._global_name)
+            return self._assoc.value
+
+        return lookup_and_send_2_tier2(
+            determine_outer_self(rcvr, self._context_level),
+            self._global_name,
+            "unknownGlobal:",
+        )
+
+    def invoke_2(self, rcvr, _arg1, ctx=None):
         return self.invoke_1(rcvr)
+
+    def invoke_2_tier2(self, rcvr, _arg1, ctx=None):
+        return self.invoke_1_tier2(rcvr)
 
     def invoke_3(self, rcvr, _arg1, _arg2):
         return self.invoke_1(rcvr)
+
+    def invoke_3_tier2(self, rcvr, _arg1, _arg2):
+        return self.invoke_1_tier2(rcvr)
 
     def invoke_n(self, stack, stack_ptr):
         num_args = self._signature.get_number_of_signature_arguments()
         rcvr = stack[stack_ptr - (num_args - 1)]
         value = self.invoke_1(rcvr)
+        return stack_pop_old_arguments_and_push_result(
+            stack,
+            stack_ptr,
+            num_args,
+            value,
+        )
+
+    def invoke_n_tier2(self, stack, stack_ptr):
+        num_args = self._signature.get_number_of_signature_arguments()
+        rcvr = stack[stack_ptr - (num_args - 1)]
+        value = self.invoke_1_tier2(rcvr)
         return stack_pop_old_arguments_and_push_result(
             stack,
             stack_ptr,
@@ -147,23 +195,47 @@ class FieldRead(AbstractTrivialMethod):
         self._field_idx = field_idx
         self._context_level = context_level
 
-    def invoke_1(self, rcvr):
+    def invoke_1(self, rcvr, ctx=None):
         if self._context_level == 0:
             return rcvr.get_field(self._field_idx)
 
         outer_self = determine_outer_self(rcvr, self._context_level)
         return outer_self.get_field(self._field_idx)
 
-    def invoke_2(self, rcvr, _arg1):
+    def invoke_1_tier2(self, rcvr, ctx=None):
+        if self._context_level == 0:
+            return rcvr.get_field(self._field_idx)
+
+        outer_self = determine_outer_self(rcvr, self._context_level)
+        return outer_self.get_field(self._field_idx)
+
+    def invoke_2(self, rcvr, _arg1, ctx=None):
         return self.invoke_1(rcvr)
 
-    def invoke_3(self, rcvr, _arg1, _arg2):
+    def invoke_2_tier2(self, rcvr, _arg1, ctx=None):
+        return self.invoke_1_tier2(rcvr)
+
+    def invoke_3(self, rcvr, _arg1, _arg2, ctx=None):
         return self.invoke_1(rcvr)
 
-    def invoke_n(self, stack, stack_ptr):
+    def invoke_3_tier2(self, rcvr, _arg1, _arg2, ctx=None):
+        return self.invoke_1_tier2(rcvr)
+
+    def invoke_n(self, stack, stack_ptr, ctx=None):
         num_args = self._signature.get_number_of_signature_arguments()
         rcvr = stack[stack_ptr - (num_args - 1)]
         value = self.invoke_1(rcvr)
+        return stack_pop_old_arguments_and_push_result(
+            stack,
+            stack_ptr,
+            num_args,
+            value,
+        )
+
+    def invoke_n_tier2(self, stack, stack_ptr, ctx=None):
+        num_args = self._signature.get_number_of_signature_arguments()
+        rcvr = stack[stack_ptr - (num_args - 1)]
+        value = self.invoke_1_tier2(rcvr)
         return stack_pop_old_arguments_and_push_result(
             stack,
             stack_ptr,
@@ -192,25 +264,51 @@ class FieldWrite(AbstractTrivialMethod):
         self._field_idx = field_idx
         self._arg_idx = arg_idx
 
-    def invoke_1(self, _rcvr):
+    def invoke_1(self, _rcvr, ctx=None):
         raise NotImplementedError(
             "Not supported, should never be called. We need an argument"
         )
 
-    def invoke_2(self, rcvr, arg1):
+    def invoke_1_tier2(self, _rcvr, ctx=None):
+        raise NotImplementedError(
+            "Not supported, should never be called. We need an argument"
+        )
+
+    def invoke_2(self, rcvr, arg1, ctx=None):
         rcvr.set_field(self._field_idx, arg1)
         return rcvr
 
-    def invoke_3(self, rcvr, arg1, arg2):
+    def invoke_2_tier2(self, rcvr, arg1, ctx=None):
+        rcvr.set_field(self._field_idx, arg1)
+        return rcvr
+
+    def invoke_3(self, rcvr, arg1, arg2, ctx=None):
         if self._arg_idx == 1:
             return self.invoke_2(rcvr, arg1)
         return self.invoke_2(rcvr, arg2)
 
-    def invoke_n(self, stack, stack_ptr):
+    def invoke_3_tier2(self, rcvr, arg1, arg2, ctx=None):
+        if self._arg_idx == 1:
+            return self.invoke_2_tier2(rcvr, arg1)
+        return self.invoke_2_tier2(rcvr, arg2)
+
+    def invoke_n(self, stack, stack_ptr, ctx=None):
         num_args = self._signature.get_number_of_signature_arguments()
         rcvr = stack[stack_ptr - (num_args - 1)]
         arg = stack[stack_ptr - (num_args - self._arg_idx)]
         self.invoke_2(rcvr, arg)
+        return stack_pop_old_arguments_and_push_result(
+            stack,
+            stack_ptr,
+            num_args,
+            rcvr,
+        )
+
+    def invoke_n_tier2(self, stack, stack_ptr, ctx=None):
+        num_args = self._signature.get_number_of_signature_arguments()
+        rcvr = stack[stack_ptr - (num_args - 1)]
+        arg = stack[stack_ptr - (num_args - self._arg_idx)]
+        self.invoke_2_tier2(rcvr, arg)
         return stack_pop_old_arguments_and_push_result(
             stack,
             stack_ptr,

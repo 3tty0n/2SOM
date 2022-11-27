@@ -39,7 +39,7 @@ from som.interpreter.bc.frame import (
     stack_pop_old_arguments_and_push_result,
     create_frame_3,
 )
-from som.interpreter.bc.interpreter import interpret
+from som.interpreter.bc.interpreter import interpret, interpret_tier2
 from som.interpreter.control_flow import ReturnException
 from som.vmobjects.abstract_object import AbstractObject
 from som.vmobjects.method import AbstractMethod
@@ -84,6 +84,8 @@ class BcAbstractMethod(AbstractMethod):
         self._receiver_types = [None] * num_bytecodes
         self._selectors = [None] * num_bytecodes
         self._invokable = [None] * num_bytecodes
+
+        self._counts = [0] * num_bytecodes
 
         self._literals = literals
 
@@ -231,6 +233,13 @@ class BcAbstractMethod(AbstractMethod):
     def has_invokable(self, bytecode_index):
         return self._invokable[bytecode_index] is not None
 
+    def get_count(self, bytecode_index):
+        assert 0 <= bytecode_index < len(self._counts)
+        return self._counts
+
+    def incr_count(self, bytecode_index):
+        assert 0 <= bytecode_index < len(self._counts)
+        self._counts[bytecode_index] += 1
 
 
 def _interp_with_nlr(method, new_frame, max_stack_size):
@@ -247,12 +256,30 @@ def _interp_with_nlr(method, new_frame, max_stack_size):
         raise e
 
 
+def _interp_with_nlr_tier2(method, new_frame, max_stack_size):
+    inner = get_inner_as_context(new_frame)
+
+    try:
+        result = interpret_tier2(method, new_frame, max_stack_size)
+        mark_as_no_longer_on_stack(inner)
+        return result
+    except ReturnException as e:
+        mark_as_no_longer_on_stack(inner)
+        if e.has_reached_target(inner):
+            return e.get_result()
+        raise e
+
+
 class BcMethod(BcAbstractMethod):
-    def invoke_1(self, rcvr):
+    def invoke_1(self, rcvr, ctx=None):
         new_frame = create_frame_1(rcvr, self._size_frame, self._size_inner)
         return interpret(self, new_frame, self._maximum_number_of_stack_elements)
 
-    def invoke_2(self, rcvr, arg1):
+    def invoke_1_tier2(self, rcvr, ctx=None):
+        new_frame = create_frame_1(rcvr, self._size_frame, self._size_inner)
+        return interpret_tier2(self, new_frame, self._maximum_number_of_stack_elements)
+
+    def invoke_2(self, rcvr, arg1, ctx=None):
         new_frame = create_frame_2(
             rcvr,
             arg1,
@@ -262,7 +289,17 @@ class BcMethod(BcAbstractMethod):
         )
         return interpret(self, new_frame, self._maximum_number_of_stack_elements)
 
-    def invoke_3(self, rcvr, arg1, arg2):
+    def invoke_2_tier2(self, rcvr, arg1, ctx=None):
+        new_frame = create_frame_2(
+            rcvr,
+            arg1,
+            self._arg_inner_access[0],
+            self._size_frame,
+            self._size_inner,
+        )
+        return interpret_tier2(self, new_frame, self._maximum_number_of_stack_elements)
+
+    def invoke_3(self, rcvr, arg1, arg2, ctx=None):
         new_frame = create_frame_3(
             self._arg_inner_access,
             self._size_frame,
@@ -273,7 +310,18 @@ class BcMethod(BcAbstractMethod):
         )
         return interpret(self, new_frame, self._maximum_number_of_stack_elements)
 
-    def invoke_n(self, stack, stack_ptr):
+    def invoke_3_tier2(self, rcvr, arg1, arg2, ctx=None):
+        new_frame = create_frame_3(
+            self._arg_inner_access,
+            self._size_frame,
+            self._size_inner,
+            rcvr,
+            arg1,
+            arg2,
+        )
+        return interpret_tier2(self, new_frame, self._maximum_number_of_stack_elements)
+
+    def invoke_n(self, stack, stack_ptr, ctx=None):
         new_frame = create_frame(
             self._arg_inner_access,
             self._size_frame,
@@ -283,6 +331,20 @@ class BcMethod(BcAbstractMethod):
             self._number_of_arguments,
         )
         result = interpret(self, new_frame, self._maximum_number_of_stack_elements)
+        return stack_pop_old_arguments_and_push_result(
+            stack, stack_ptr, self._number_of_arguments, result
+        )
+
+    def invoke_n_tier2(self, stack, stack_ptr, ctx=None):
+        new_frame = create_frame(
+            self._arg_inner_access,
+            self._size_frame,
+            self._size_inner,
+            stack,
+            stack_ptr,
+            self._number_of_arguments,
+        )
+        result = interpret_tier2(self, new_frame, self._maximum_number_of_stack_elements)
         return stack_pop_old_arguments_and_push_result(
             stack, stack_ptr, self._number_of_arguments, result
         )
@@ -660,11 +722,15 @@ class _BackJumpPatch(HeapEntry):
 
 
 class BcMethodNLR(BcMethod):
-    def invoke_1(self, rcvr):
+    def invoke_1(self, rcvr, ctx=None):
         new_frame = create_frame_1(rcvr, self._size_frame, self._size_inner)
         return _interp_with_nlr(self, new_frame, self._maximum_number_of_stack_elements)
 
-    def invoke_2(self, rcvr, arg1):
+    def invoke_1_tier2(self, rcvr, ctx=None):
+        new_frame = create_frame_1(rcvr, self._size_frame, self._size_inner)
+        return _interp_with_nlr_tier2(self, new_frame, self._maximum_number_of_stack_elements)
+
+    def invoke_2(self, rcvr, arg1, ctx=None):
         new_frame = create_frame_2(
             rcvr,
             arg1,
@@ -674,7 +740,17 @@ class BcMethodNLR(BcMethod):
         )
         return _interp_with_nlr(self, new_frame, self._maximum_number_of_stack_elements)
 
-    def invoke_3(self, rcvr, arg1, arg2):
+    def invoke_2_tier2(self, rcvr, arg1, ctx=None):
+        new_frame = create_frame_2(
+            rcvr,
+            arg1,
+            self._arg_inner_access[0],
+            self._size_frame,
+            self._size_inner,
+        )
+        return _interp_with_nlr_tier2(self, new_frame, self._maximum_number_of_stack_elements)
+
+    def invoke_3(self, rcvr, arg1, arg2, ctx=None):
         new_frame = create_frame_3(
             self._arg_inner_access,
             self._size_frame,
@@ -685,7 +761,18 @@ class BcMethodNLR(BcMethod):
         )
         return _interp_with_nlr(self, new_frame, self._maximum_number_of_stack_elements)
 
-    def invoke_n(self, stack, stack_ptr):
+    def invoke_3_tier2(self, rcvr, arg1, arg2, ctx=None):
+        new_frame = create_frame_3(
+            self._arg_inner_access,
+            self._size_frame,
+            self._size_inner,
+            rcvr,
+            arg1,
+            arg2,
+        )
+        return _interp_with_nlr_tier2(self, new_frame, self._maximum_number_of_stack_elements)
+
+    def invoke_n(self, stack, stack_ptr, ctx=None):
         new_frame = create_frame(
             self._arg_inner_access,
             self._size_frame,
@@ -698,6 +785,32 @@ class BcMethodNLR(BcMethod):
 
         try:
             result = interpret(self, new_frame, self._maximum_number_of_stack_elements)
+            stack_ptr = stack_pop_old_arguments_and_push_result(
+                stack, stack_ptr, self._number_of_arguments, result
+            )
+            mark_as_no_longer_on_stack(inner)
+            return stack_ptr
+        except ReturnException as e:
+            mark_as_no_longer_on_stack(inner)
+            if e.has_reached_target(inner):
+                return stack_pop_old_arguments_and_push_result(
+                    stack, stack_ptr, self._number_of_arguments, e.get_result()
+                )
+            raise e
+
+    def invoke_n_tier2(self, stack, stack_ptr, ctx=None):
+        new_frame = create_frame(
+            self._arg_inner_access,
+            self._size_frame,
+            self._size_inner,
+            stack,
+            stack_ptr,
+            self._number_of_arguments,
+        )
+        inner = get_inner_as_context(new_frame)
+
+        try:
+            result = interpret_tier2(self, new_frame, self._maximum_number_of_stack_elements)
             stack_ptr = stack_pop_old_arguments_and_push_result(
                 stack, stack_ptr, self._number_of_arguments, result
             )
