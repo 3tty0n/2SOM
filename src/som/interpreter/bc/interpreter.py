@@ -36,7 +36,7 @@ from rlib.jit import (
 )
 
 
-TRACE_THRESHOLD = 1039 / 3
+TRACE_THRESHOLD = 1039 / 2
 # TRACE_THRESHOLD = tier_manager.get_threshold()
 
 
