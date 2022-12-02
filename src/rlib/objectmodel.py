@@ -6,6 +6,7 @@ else:
     StrType = (str, unicode)  # pylint: disable=undefined-variable
 
 try:
+    from rpython.rlib.objectmodel import always_inline  # pylint: disable=W
     from rpython.rlib.objectmodel import we_are_translated  # pylint: disable=W
     from rpython.rlib.objectmodel import compute_identity_hash  # pylint: disable=W
     from rpython.rlib.objectmodel import compute_hash  # pylint: disable=unused-import
@@ -14,6 +15,9 @@ try:
     from rpython.rlib.longlong2float import float2longlong  # pylint: disable=W
 except ImportError:
     "NOT_RPYTHON"
+
+    def always_inline(func):
+        return func
 
     def we_are_translated():
         return False
