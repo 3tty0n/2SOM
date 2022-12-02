@@ -10,7 +10,7 @@ SOM_TIER=1
 
 all: compile
 
-compile: som-ast-jit
+compile: som-bc-jit-interp som-bc-jit-tier1 som-bc-jit-tier2 som-bc-jit-hybrid
 
 som-ast-jit: core-lib/.git
 	SOM_INTERP=AST PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
@@ -18,11 +18,20 @@ som-ast-jit: core-lib/.git
 som-bc-jit:	core-lib/.git
 	SOM_TIER=$(SOM_TIER) SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
 
+som-bc-jit-tier1: core-lib/.git
+	SOM_TIER=1 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
+
+som-bc-jit-tier2: core-lib/.git
+	SOM_TIER=2 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
+
+som-bc-jit-hybrid: core-lib/.git
+	SOM_TIER=3 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
+
 som-ast-interp: core-lib/.git
 	SOM_INTERP=AST PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) $(RPYTHON_ARG) --batch src/main_rpython.py
 
 som-bc-interp: core-lib/.git
-	SOM_TIER=$(SOM_TIER) SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) $(RPYTHON_ARG) --batch src/main_rpython.py
+	SOM_TIER=1 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) $(RPYTHON_ARG) --batch src/main_rpython.py
 
 som-interp: som-ast-interp som-bc-interp
 
