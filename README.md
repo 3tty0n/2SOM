@@ -1,6 +1,51 @@
 PySOM - The Simple Object Machine Smalltalk
 ===========================================
 
+Threaded Code Generation
+------------
+
+[Threaded code][1] is a code style that essentially consists of a call instruction to each handler.
+So, **threaded code generation** is a technique to produce threaded code-style code with RPython.
+This customized PySOM implementation demonstrates how threaded code generation is implemented and how it works.
+
+To compile the threaded code PySOM, you should prepare a customized PyPy implementation.
+
+    hg clone https://foss.heptapod.net/pypy/pypy -r threaded-code-generation
+
+Then, you need to type the following command to build the threaded code PySOM:
+
+    make som-bc-jit SOM_TIER=1
+
+`SOM_TIER` is an environmental variable to specify the starting level of compilation.
+
+- Starting from threaded code generation: `make som-bc-jit SOM_TIER=1`
+    - Producing `som-bc-jit-tier1`
+- Starting from tracing JIT: `make som-bc-jit SOM_TIER=2`
+    - Producing `som-bc-jit-tier2`
+- Enable hybrid compilation, starting from threaded code generation and then shifting to tracing compilation: `make som-bc-jit SOM_TIER=3`
+    - Producing `som-bc-jit-tier3`
+
+[1]: https://www.complang.tuwien.ac.at/forth/threaded-code.html
+
+Benchmarking
+------------
+
+For benchmarking, the prerequisite is [ReBench][2] and our [SOM][3] repository.
+
+ReBench, which is developed by Dr. Stefan Marr, a benchmarking tool written in Python.
+ReBench is supported in Python 3. To install ReBench:
+
+    pip3 install rebench
+
+Also, you need to install SOM standard library.  To install our customized SOM:
+
+    # you are currently in PySOM repository
+    cd ..
+    git clone https://github.com/prg-titech/SOM.git
+
+[2]: https://github.com/smarr/ReBench
+[3]: https://github.com/prg-titech/SOM
+
 Introduction
 ------------
 
@@ -26,7 +71,7 @@ This repository contains a Python-base implementation of SOM, including
 SOM's standard library, and a number of benchmarks. The [main project
 page][SOMst] has links to other SOM VM implementations.
 
-PySOM implementation use either an abstract-syntax-tree or a 
+PySOM implementation use either an abstract-syntax-tree or a
 bytecode-based interpreter. One can choose between them with the `SOM_INTERP` environment variable.
 
  - AST-based interpreter: `SOM_INTERP=AST`
@@ -42,7 +87,7 @@ i.e., the Smalltalk code is downloaded.
 PySOM's tests can be executed with:
 
     SOM_INTERP=AST ./som.sh -cp Smalltalk TestSuite/TestHarness.som
-   
+
 A simple Hello World program can be started with:
 
     SOM_INTERP=AST ./som.sh -cp Smalltalk Examples/Hello.som
