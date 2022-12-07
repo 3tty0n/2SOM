@@ -10,7 +10,7 @@ SOM_TIER=1
 
 all: compile
 
-compile: som-bc-jit-interp som-bc-jit-tier1 som-bc-jit-tier2 som-bc-jit-hybrid
+compile: som-bc-interp som-bc-jit-tier1 som-bc-jit-tier2 som-bc-jit-hybrid
 
 som-ast-jit: core-lib/.git
 	SOM_INTERP=AST PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
