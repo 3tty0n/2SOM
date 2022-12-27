@@ -50,6 +50,10 @@ def enable_shallow_tracing(func):
 
     @always_inline
     def call_handler(*args):
+        """Add dummy flag, which is placed at the last argument, to shallow_handler.
+        When we_are_jitted returns True, add True to the dummy flag. Otherwise,
+        pass False to the flag.
+        """
         if we_are_jitted():
             shallow_hanlder(*args + (True,))
         else:
@@ -976,6 +980,14 @@ def _interp_with_nlr(method, new_frame, max_stack_size, dummy=False):
 
 @jit.unroll_safe
 def interpret(method, frame, max_stack_size, dummy=False):
+    """
+    Each interpreter represents copmilation tier.
+    e.g,
+      - interpret_tier1: threaded code
+      - interpret_tier2: tracing JIT
+    In the whle loop we can define the rule to shift the compilation timer.
+    Movement from interpreter to interpreter is implemented using exceptions.
+    """
     if dummy:
         return
 
@@ -1011,11 +1023,6 @@ def interpret(method, frame, max_stack_size, dummy=False):
             return w_result
     else:
         assert False, "unreached tier"
-
-    # if is_tier1():
-    #     return interpret_tier1(method, frame, max_stack_size)
-    # else:
-    #     return interpret_tier2(method, frame, max_stack_size)
 
 
 @jit.unroll_safe
@@ -1182,8 +1189,8 @@ def interpret_tier1(
             _pop_field_1(stack, frame)
 
         elif bytecode == Bytecodes.send_1:
+            rcvr_type = method.get_receiver_type(current_bc_idx)
             if we_are_jitted():
-                rcvr_type = method.get_receiver_type(current_bc_idx)
                 if rcvr_type is None:
                     next_bc_idx = _send_1(
                         method,
@@ -1192,11 +1199,29 @@ def interpret_tier1(
                         stack,
                     )
                 else:
+                    # Polymorphic inline chache optimization for send instruction
+                    #
+                    #   if emit_ptr_eq(rcvr, rcvr_type) <- guard to check rcvr type
+                    #     ---------------------------
+                    #     fast path where PIC is enabled
+                    #     ----------------------------
+                    #     slow path for fallbac
+                    #
+                    #   -> compiled to
+                    #
+                    #   fast path:                                         slow_path:
+                    #   guard_ptr_eq(rcvr, rcvr_type)  --(guard fail)--->  i1 = call(send_1(method, frame, stack, ..))
+                    #   ...                                               /
+                    #   r1 = call_assembler(frame, stack)                /
+                    #   stack.push(r1).                                 /
+                    #   ... <---------------- (merge) -----------------/
                     rcvr = stack.take(0, dummy=True)
+                    # guard to check the type of rcvr equals to rcvr_type
                     if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
                         invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
                         new_frame = _create_frame_1(invokable, frame, stack)
                         new_stack = Stack(16)
+                        # turn this method invocation into direct call to compiled code
                         result = _interpret_CALL_ASSEMBLER(
                             frame=new_frame,
                             stack=new_stack,
@@ -1207,7 +1232,8 @@ def interpret_tier1(
                             dummy=True,
                         )
                         stack.insert(0, result)
-                        # ---------------------------------------------------------------
+                        # This path is a slow path, going this way when the rcvr type is
+                        # different from when it is compiled
                         begin_slow_path(frame, stack)
                         next_bc_idx = _send_1(
                             method,
@@ -1216,13 +1242,12 @@ def interpret_tier1(
                             stack,
                         )
                         end_slow_path(frame, stack)
-                        # ---------------------------------------------------------------
             else:
                 next_bc_idx = _send_1(method, current_bc_idx, next_bc_idx, stack)
 
         elif bytecode == Bytecodes.send_2:
+            rcvr_type = method.get_receiver_type(current_bc_idx)
             if we_are_jitted():
-                rcvr_type = method.get_receiver_type(current_bc_idx)
                 if rcvr_type is None:
                     next_bc_idx = _send_2(
                         method,
@@ -1265,8 +1290,8 @@ def interpret_tier1(
                 )
 
         elif bytecode == Bytecodes.send_3:
+            rcvr_type = method.get_receiver_type(current_bc_idx)
             if we_are_jitted():
-                rcvr_type = method.get_receiver_type(current_bc_idx)
                 if rcvr_type is None:
                     next_bc_idx = _send_3(
                         method,
@@ -1362,7 +1387,6 @@ def interpret_tier1(
         elif bytecode == Bytecodes.return_self:
             if we_are_jitted():
                 if tstack.t_is_empty():
-                    # cached_code.dump()
                     ret_object = _return_self(frame, dummy=True)
                     next_bc_idx = emit_ret(entry_bc_idx, ret_object)
                     tier1jitdriver.can_enter_jit(
