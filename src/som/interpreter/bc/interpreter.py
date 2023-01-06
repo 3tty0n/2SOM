@@ -123,7 +123,7 @@ def enable_shallow_tracing_with_value(value):
     return enable_shallow_tracing
 
 
-TRACE_THRESHOLD = 1039 / 2
+TRACE_THRESHOLD = 439
 
 
 class ContinueInTier1(Exception):
