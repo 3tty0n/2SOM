@@ -1189,8 +1189,8 @@ def interpret_tier1(
             _pop_field_1(stack, frame)
 
         elif bytecode == Bytecodes.send_1:
-            rcvr_type = method.get_receiver_type(current_bc_idx)
             if we_are_jitted():
+                rcvr_type = method.get_receiver_type(current_bc_idx)
                 if rcvr_type is None:
                     next_bc_idx = _send_1(
                         method,
@@ -1246,8 +1246,8 @@ def interpret_tier1(
                 next_bc_idx = _send_1(method, current_bc_idx, next_bc_idx, stack)
 
         elif bytecode == Bytecodes.send_2:
-            rcvr_type = method.get_receiver_type(current_bc_idx)
             if we_are_jitted():
+                rcvr_type = method.get_receiver_type(current_bc_idx)
                 if rcvr_type is None:
                     next_bc_idx = _send_2(
                         method,
@@ -1290,8 +1290,8 @@ def interpret_tier1(
                 )
 
         elif bytecode == Bytecodes.send_3:
-            rcvr_type = method.get_receiver_type(current_bc_idx)
             if we_are_jitted():
+                rcvr_type = method.get_receiver_type(current_bc_idx)
                 if rcvr_type is None:
                     next_bc_idx = _send_3(
                         method,
