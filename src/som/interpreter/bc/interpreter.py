@@ -606,6 +606,7 @@ def _send_1(method, current_bc_idx, next_bc_idx, stack):
             method.set_receiver_type(current_bc_idx, rcvr_type)
 
     if not we_are_translated():
+        statistics.record(receiver, invokable)
         statistics.incr(invokable)
 
     if invokable is not None:
@@ -645,6 +646,7 @@ def _send_2(method, current_bc_idx, next_bc_idx, stack):
             method.set_receiver_type(current_bc_idx, rcvr_type)
 
     if not we_are_translated():
+        statistics.record(receiver, invokable)
         statistics.incr(invokable)
 
     if invokable is not None:
@@ -678,6 +680,7 @@ def _send_3(method, current_bc_idx, next_bc_idx, stack):
             method.set_receiver_type(current_bc_idx, rcvr_type)
 
     if not we_are_translated():
+        statistics.record(receiver, invokable)
         statistics.incr(invokable)
 
     if invokable is not None:
@@ -708,7 +711,8 @@ def _send_n(method, current_bc_idx, next_bc_idx, stack):
     layout = receiver.get_object_layout(current_universe)
     invokable = _lookup(layout, signature, method, current_bc_idx)
 
-    if not we_are_jitted():
+    if not we_are_translated():
+        statistics.record(receiver, invokable)
         statistics.incr(invokable)
 
     if invokable is not None:
