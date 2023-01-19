@@ -123,7 +123,7 @@ def enable_shallow_tracing_with_value(value):
     return enable_shallow_tracing
 
 
-TRACE_THRESHOLD = 1039 / 5
+TRACE_THRESHOLD = 1039 / 4
 
 
 class ContinueInTier1(Exception):
@@ -2113,6 +2113,12 @@ def interpret_tier2(
 
         elif bytecode == Bytecodes.jump_backward:
             next_bc_idx = current_bc_idx - method.get_bytecode(current_bc_idx + 1)
+
+            # if is_hybrid():
+            #     method.incr_count(current_bc_idx)
+            #     if method._counts[current_bc_idx] < TRACE_THRESHOLD:
+            #         raise ContinueInTier1(method, frame, stack, stack_ptr, next_bc_idx)
+
             jitdriver.can_enter_jit(
                 current_bc_idx=next_bc_idx,
                 stack_ptr=stack_ptr,
