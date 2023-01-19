@@ -123,7 +123,7 @@ def enable_shallow_tracing_with_value(value):
     return enable_shallow_tracing
 
 
-TRACE_THRESHOLD = 439
+TRACE_THRESHOLD = 1039 / 5
 
 
 class ContinueInTier1(Exception):
@@ -259,14 +259,14 @@ def _invoke_invokable_slow_path(invokable, num_args, receiver, stack):
 
 def _invoke_invokable_slow_path_tier2(invokable, num_args, receiver, stack, stack_ptr):
     if num_args == 1:
-        stack[stack_ptr] = invokable.invoke_1(receiver)
+        stack[stack_ptr] = invokable.invoke_1_tier2(receiver)
 
     elif num_args == 2:
         arg = stack[stack_ptr]
         if we_are_jitted():
             stack[stack_ptr] = None
         stack_ptr -= 1
-        stack[stack_ptr] = invokable.invoke_2(receiver, arg)
+        stack[stack_ptr] = invokable.invoke_2_tier2(receiver, arg)
 
     elif num_args == 3:
         arg2 = stack[stack_ptr]
@@ -278,10 +278,10 @@ def _invoke_invokable_slow_path_tier2(invokable, num_args, receiver, stack, stac
 
         stack_ptr -= 2
 
-        stack[stack_ptr] = invokable.invoke_3(receiver, arg1, arg2)
+        stack[stack_ptr] = invokable.invoke_3_tier2(receiver, arg1, arg2)
 
     else:
-        stack_ptr = invokable.invoke_n(stack, stack_ptr)
+        stack_ptr = invokable.invoke_n_tier2(stack, stack_ptr)
     return stack_ptr
 
 
@@ -911,7 +911,7 @@ def _is_greater_two(stack, dummy=False):
     elif isinstance(top, Double):
         top_val = top.get_embedded_double()
     else:
-        assert False, "top should be integer or double"
+        return False
 
     top_2 = stack.take(1)
     if isinstance(top_2, Integer):
@@ -919,7 +919,7 @@ def _is_greater_two(stack, dummy=False):
     elif isinstance(top_2, Double):
         top_2_val = top_2.get_embedded_double()
     else:
-        assert False, "top_2 should be integer or double"
+        return False
     result = top_val > top_2_val
     if result:
         stack.pop()
@@ -2208,7 +2208,7 @@ def interpret_tier2(
 
         elif bytecode == Bytecodes.q_super_send_1:
             invokable = method.get_inline_cache_invokable(current_bc_idx)
-            stack[stack_ptr] = invokable.invoke_1(stack[stack_ptr])
+            stack[stack_ptr] = invokable.invoke_1_tier2(stack[stack_ptr])
 
         elif bytecode == Bytecodes.q_super_send_2:
             invokable = method.get_inline_cache_invokable(current_bc_idx)
@@ -2216,7 +2216,7 @@ def interpret_tier2(
             if we_are_jitted():
                 stack[stack_ptr] = None
             stack_ptr -= 1
-            stack[stack_ptr] = invokable.invoke_2(stack[stack_ptr], arg)
+            stack[stack_ptr] = invokable.invoke_2_tier2(stack[stack_ptr], arg)
 
         elif bytecode == Bytecodes.q_super_send_3:
             invokable = method.get_inline_cache_invokable(current_bc_idx)
@@ -2226,11 +2226,11 @@ def interpret_tier2(
                 stack[stack_ptr] = None
                 stack[stack_ptr - 1] = None
             stack_ptr -= 2
-            stack[stack_ptr] = invokable.invoke_3(stack[stack_ptr], arg1, arg2)
+            stack[stack_ptr] = invokable.invoke_3_tier2(stack[stack_ptr], arg1, arg2)
 
         elif bytecode == Bytecodes.q_super_send_n:
             invokable = method.get_inline_cache_invokable(current_bc_idx)
-            stack_ptr = invokable.invoke_n(stack, stack_ptr)
+            stack_ptr = invokable.invoke_n_tier2(stack, stack_ptr)
 
         elif bytecode == Bytecodes.push_local:
             method.patch_variable_access(current_bc_idx)

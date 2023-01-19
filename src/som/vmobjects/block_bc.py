@@ -59,21 +59,28 @@ class BcBlock(AbstractObject):
 
 def block_evaluation_primitive(num_args, universe):
     if num_args == 1:
-        return UnaryPrimitive(VALUE_SIGNATURE[num_args], universe, _invoke_1)
+        return UnaryPrimitive(VALUE_SIGNATURE[num_args], universe, _invoke_1_tier2)
     if num_args == 2:
-        return BinaryPrimitive(VALUE_SIGNATURE[num_args], universe, _invoke_2)
+        return BinaryPrimitive(VALUE_SIGNATURE[num_args], universe, _invoke_2_tier2)
     if num_args == 3:
-        return TernaryPrimitive(VALUE_SIGNATURE[num_args], universe, _invoke_3)
+        return TernaryPrimitive(VALUE_SIGNATURE[num_args], universe, _invoke_3_tier2)
     raise Exception("Unsupported number of arguments for block: " + str(num_args))
 
 
 def _invoke_1(rcvr):
     return rcvr.get_method().invoke_1(rcvr)
 
+def _invoke_1_tier2(rcvr):
+    return rcvr.get_method().invoke_1_tier2(rcvr)
 
 def _invoke_2(rcvr, arg):
     return rcvr.get_method().invoke_2(rcvr, arg)
 
+def _invoke_2_tier2(rcvr, arg):
+    return rcvr.get_method().invoke_2_tier2(rcvr, arg)
 
 def _invoke_3(rcvr, arg1, arg2):
     return rcvr.get_method().invoke_3(rcvr, arg1, arg2)
+
+def _invoke_3_tier2(rcvr, arg1, arg2):
+    return rcvr.get_method().invoke_3_tier2(rcvr, arg1, arg2)
