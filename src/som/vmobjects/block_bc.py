@@ -59,9 +59,9 @@ class BcBlock(AbstractObject):
 
 def block_evaluation_primitive(num_args, universe):
     if num_args == 1:
-        return UnaryPrimitive(VALUE_SIGNATURE[num_args], universe, _invoke_1_tier2)
+        return UnaryPrimitive(VALUE_SIGNATURE[num_args], universe, _invoke_1)
     if num_args == 2:
-        return BinaryPrimitive(VALUE_SIGNATURE[num_args], universe, _invoke_2_tier2)
+        return BinaryPrimitive(VALUE_SIGNATURE[num_args], universe, _invoke_2)
     if num_args == 3:
         return TernaryPrimitive(VALUE_SIGNATURE[num_args], universe, _invoke_3_tier2)
     raise Exception("Unsupported number of arguments for block: " + str(num_args))
