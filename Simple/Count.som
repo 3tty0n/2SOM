@@ -1,8 +1,0 @@
-Count = (
-        count: n = (
-            (n > 0) ifTrue: [ ^ (n + (self count: n - 1)) ]
-                    ifFalse: [ ^ n ]
-        )
-
-        run = (^self count: 100)
-)
