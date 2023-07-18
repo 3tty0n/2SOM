@@ -2401,7 +2401,7 @@ def _send_does_not_understand_tier2(receiver, selector, stack, stack_ptr):
     return stack_ptr
 
 
-def get_printable_location(bytecode_index, method):
+def get_printable_location_tier2(bytecode_index, method):
     from som.vmobjects.method_bc import BcAbstractMethod
 
     assert isinstance(method, BcAbstractMethod)
@@ -2418,20 +2418,19 @@ def get_printable_location_tier1(bytecode_index, entry_bc_idx, method, tstack):
 
     assert isinstance(method, BcAbstractMethod)
     bc = method.get_bytecode(bytecode_index)
-    return "%d: %s in %s tstack: %s" % (
-        bytecode_index,
+    return "%s @ %d in %s tstack %s" % (
         bytecode_as_str(bc),
+        bytecode_index,
         method.merge_point_string(),
         t_dump(tstack),
     )
-
 
 jitdriver = jit.JitDriver(
     name="Interpreter",
     greens=["current_bc_idx", "method"],
     reds=["stack_ptr", "frame", "stack"],
     # virtualizables=['frame'],
-    get_printable_location=get_printable_location,
+    get_printable_location=get_printable_location_tier2,
     # the next line is a workaround around a likely bug in RPython
     # for some reason, the inlining heuristics default to "never inline" when
     # two different jit drivers are involved (in our case, the primitive
