@@ -1338,7 +1338,9 @@ def interpret_tier1(
             if we_are_jitted():
                 if tstack.t_is_empty():
                     ret_object = _return_local(stack, dummy=True)
-                    next_bc_idx = emit_ret(entry_bc_idx, ret_object)
+                    # next_bc_idx = emit_ret(entry_bc_idx, ret_object)
+                    jit.emit_ret(ret_object)
+                    next_bc_idx = entry_bc_idx # HACK: close this loop
                     tier1jitdriver.can_enter_jit(
                         current_bc_idx=current_bc_idx,
                         entry_bc_idx=entry_bc_idx,
@@ -1350,7 +1352,8 @@ def interpret_tier1(
                 else:
                     ret_object = _return_local(stack, dummy=True)
                     next_bc_idx, tstack = tstack.t_pop()
-                    next_bc_idx = emit_ret(next_bc_idx, ret_object)
+                    # next_bc_idx = emit_ret(next_bc_idx, ret_object)
+                    jit.emit_ret(ret_object)
             else:
                 return _return_local(stack)
 
@@ -1361,8 +1364,9 @@ def interpret_tier1(
                     ret_object = _do_return_non_local(
                         val, frame, method.get_bytecode(current_bc_idx + 1)
                     )
-                    # TODO: manual emit_ret
-                    next_bc_idx = emit_ret(entry_bc_idx, ret_object)
+                    # next_bc_idx = emit_ret(entry_bc_idx, ret_object)
+                    jit.emit_ret(ret_object)
+                    next_bc_idx = entry_bc_idx # HACK: close this loop
                     tier1jitdriver.can_enter_jit(
                         current_bc_idx=current_bc_idx,
                         entry_bc_idx=entry_bc_idx,
@@ -1377,7 +1381,8 @@ def interpret_tier1(
                         val, frame, method.get_bytecode(current_bc_idx + 1)
                     )
                     next_bc_idx, tstack = tstack.t_pop()
-                    next_bc_idx = emit_ret(next_bc_idx, ret_object)
+                    # next_bc_idx = emit_ret(next_bc_idx, ret_object)
+                    jit.emit_ret(ret_object)
             else:
                 val = stack.top()
                 return _do_return_non_local(
@@ -1388,7 +1393,9 @@ def interpret_tier1(
             if we_are_jitted():
                 if tstack.t_is_empty():
                     ret_object = _return_self(frame, dummy=True)
-                    next_bc_idx = emit_ret(entry_bc_idx, ret_object)
+                    # next_bc_idx = emit_ret(entry_bc_idx, ret_object)
+                    jit.emit_ret(ret_object)
+                    next_bc_idx = entry_bc_idx # HACK: close this loop
                     tier1jitdriver.can_enter_jit(
                         current_bc_idx=current_bc_idx,
                         entry_bc_idx=entry_bc_idx,
@@ -1400,7 +1407,8 @@ def interpret_tier1(
                 else:
                     ret_object = _return_self(frame, dummy=True)
                     next_bc_idx, tstack = tstack.t_pop()
-                    next_bc_idx = emit_ret(next_bc_idx, ret_object)
+                    # next_bc_idx = emit_ret(next_bc_idx, ret_object)
+                    jit.emit_ret(ret_object)
             else:
                 return _return_self(frame)
 

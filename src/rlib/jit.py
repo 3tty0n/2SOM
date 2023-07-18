@@ -9,6 +9,8 @@ try:
     from rpython.rlib.jit import we_are_jitted  # pylint: disable=unused-import
     from rpython.rlib.jit import hint  # pylint: disable=unused-import
     from rpython.rlib.jit import not_in_trace  # pylint: disable=unused-import
+    from rpython.rlib.jit import emit_jump  # pylint: disable=unused-import
+    from rpython.rlib.jit import emit_ret  # pylint: disable=unused-import
 except ImportError:
     "NOT_RPYTHON"
 
@@ -68,3 +70,9 @@ except ImportError:
 
     def not_in_trace(func):
         return func
+
+    def emit_jump(x):  # pylint: disable=no-self-argument
+        pass
+
+    def emit_ret(x):  # pylint: disable=no-self-argument
+        pass
