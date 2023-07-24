@@ -1483,7 +1483,9 @@ def interpret_tier1(
 
             if we_are_jitted():
                 if tstack.t_is_empty():
-                    next_bc_idx = emit_jump(entry_bc_idx, target_bc_idx)
+                    # next_bc_idx = emit_jump(entry_bc_idx, target_bc_idx)
+                    jit.emit_jump(target_bc_idx)
+                    next_bc_idx = entry_bc_idx
                     tier1jitdriver.can_enter_jit(
                         current_bc_idx=target_bc_idx,
                         entry_bc_idx=entry_bc_idx,
@@ -1494,7 +1496,8 @@ def interpret_tier1(
                     )
                 else:
                     next_bc_idx, tstack = tstack.t_pop()
-                    next_bc_idx = emit_jump(next_bc_idx, target_bc_idx)
+                    # next_bc_idx = emit_jump(next_bc_idx, target_bc_idx)
+                    jit.emit_jump(target_bc_idx)
             else:
                 next_bc_idx = entry_bc_idx = target_bc_idx
 
@@ -1618,7 +1621,9 @@ def interpret_tier1(
 
             if we_are_jitted():
                 if tstack.t_is_empty():
-                    next_bc_idx = emit_jump(entry_bc_idx, target_bc_idx)
+                    # next_bc_idx = emit_jump(entry_bc_idx, target_bc_idx)
+                    jit.emit_jump(target_bc_idx)
+                    next_bc_idx = entry_bc_idx
                     tier1jitdriver.can_enter_jit(
                         current_bc_idx=target_bc_idx,
                         entry_bc_idx=entry_bc_idx,
@@ -1629,7 +1634,8 @@ def interpret_tier1(
                     )
                 else:
                     next_bc_idx, tstack = tstack.t_pop()
-                    next_bc_idx = emit_jump(next_bc_idx, target_bc_idx)
+                    # next_bc_idx = emit_jump(next_bc_idx, target_bc_idx)
+                    jit.emit_jump(target_bc_idx)
             else:
                 next_bc_idx = entry_bc_idx = target_bc_idx
 
