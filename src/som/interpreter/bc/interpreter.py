@@ -924,21 +924,6 @@ def _is_greater_two(stack, dummy=False):
 
 
 @jit.dont_look_inside
-def emit_jump(current_bc_idx, next_bc_idx):
-    return current_bc_idx
-
-
-@jit.dont_look_inside
-def emit_ret(current_bc_idx, ret_val):
-    return current_bc_idx
-
-
-@jit.dont_look_inside
-def emit_label(frame, stack, label_id):
-    return stack.take(0)
-
-
-@jit.dont_look_inside
 def begin_slow_path(frame, stack):
     return stack.top()
 
