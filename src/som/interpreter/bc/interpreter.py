@@ -155,8 +155,10 @@ class Stack(object):
         self.items = [None] * max_stack_size
         self.stack_ptr = -1
 
-    @enable_shallow_tracing
-    def push(self, w_x):
+    @jit.dont_look_inside
+    def push(self, w_x, dummy=False):
+        if dummy:
+            return
         self.stack_ptr += 1
         assert self.stack_ptr < len(self.items)
         self.items[self.stack_ptr] = w_x
@@ -181,8 +183,10 @@ class Stack(object):
             return self.items[self.stack_ptr]
         return self.items[self.stack_ptr - n]
 
-    @enable_shallow_tracing
-    def insert(self, n, w_x):
+    @jit.dont_look_inside
+    def insert(self, n, w_x, dummy=False):
+        if dummy:
+            return
         assert n <= self.stack_ptr
         self.items[self.stack_ptr - n] = w_x
 
@@ -195,8 +199,10 @@ class Stack(object):
         print s, self.stack_ptr
 
 
-@enable_shallow_tracing
-def _do_super_send(stack, bytecode_index, method):
+@jit.dont_look_inside
+def _do_super_send(stack, bytecode_index, method, dummy=False):
+    if dummy:
+        return
     signature = method.get_constant(bytecode_index)
 
     receiver_class = method.get_holder().get_super_class()
@@ -223,8 +229,10 @@ def _do_super_send(stack, bytecode_index, method):
         _send_does_not_understand(receiver, invokable.get_signature(), stack)
 
 
-@enable_shallow_tracing_argn(0)
-def _do_return_non_local(result, frame, ctx_level):
+@jit.dont_look_inside
+def _do_return_non_local(result, frame, ctx_level, dummy=False):
+    if dummy:
+        return result
     # Compute the context for the non-local return
     block = get_block_at(frame, ctx_level)
 
@@ -290,40 +298,52 @@ def _halt(stack):
     return stack.top()
 
 
-@enable_shallow_tracing
-def _dup(stack):
+@jit.dont_look_inside
+def _dup(stack, dummy=False):
+    if dummy:
+        return
     val = stack.top()
     stack.push(val)
 
 
-@enable_shallow_tracing
-def _dup_second(stack):
+@jit.dont_look_inside
+def _dup_second(stack, dummy=False):
+    if dummy:
+        return
     val = stack.take(1)
     stack.push(val)
 
 
-@enable_shallow_tracing
-def _push_frame(stack, method, current_bc_idx, frame):
+@jit.dont_look_inside
+def _push_frame(stack, method, current_bc_idx, frame, dummy=False):
+    if dummy:
+        return
     stack.push(read_frame(frame, method.get_bytecode(current_bc_idx + 1)))
 
 
-@enable_shallow_tracing
-def _push_frame_0(stack, frame):
+@jit.dont_look_inside
+def _push_frame_0(stack, frame, dummy=False):
+    if dummy:
+        return
     stack.push(read_frame(frame, FRAME_AND_INNER_RCVR_IDX + 0))
 
 
-@enable_shallow_tracing
-def _push_frame_1(stack, frame):
+@jit.dont_look_inside
+def _push_frame_1(stack, frame, dummy=False):
+    if dummy:
+        return
     stack.push(read_frame(frame, FRAME_AND_INNER_RCVR_IDX + 1))
 
 
-@enable_shallow_tracing
-def _push_frame_2(stack, frame):
+@jit.dont_look_inside
+def _push_frame_2(stack, frame, dummy=False):
     stack.push(read_frame(frame, FRAME_AND_INNER_RCVR_IDX + 2))
 
 
-@enable_shallow_tracing
-def _push_inner(stack, method, current_bc_idx, frame):
+@jit.dont_look_inside
+def _push_inner(stack, method, current_bc_idx, frame, dummy=False):
+    if dummy:
+        return
     idx = method.get_bytecode(current_bc_idx + 1)
     ctx_level = method.get_bytecode(current_bc_idx + 2)
 
@@ -334,90 +354,118 @@ def _push_inner(stack, method, current_bc_idx, frame):
         stack.push(block.get_from_outer(idx))
 
 
-@enable_shallow_tracing
-def _push_inner_0(stack, frame):
+@jit.dont_look_inside
+def _push_inner_0(stack, frame, dummy=False):
     stack.push(read_inner(frame, FRAME_AND_INNER_RCVR_IDX + 0))
 
 
-@enable_shallow_tracing
-def _push_inner_1(stack, frame):
+@jit.dont_look_inside
+def _push_inner_1(stack, frame, dummy=False):
+    if dummy:
+        return
     stack.push(read_inner(frame, FRAME_AND_INNER_RCVR_IDX + 1))
 
 
-@enable_shallow_tracing
-def _push_inner_2(stack, frame):
+@jit.dont_look_inside
+def _push_inner_2(stack, frame, dummy=False):
+    if dummy:
+        return
     stack.push(read_inner(frame, FRAME_AND_INNER_RCVR_IDX + 2))
 
 
-@enable_shallow_tracing
-def _push_field(stack, method, current_bc_idx, frame):
+@jit.dont_look_inside
+def _push_field(stack, method, current_bc_idx, frame, dummy=False):
+    if dummy:
+        return
     field_idx = method.get_bytecode(current_bc_idx + 1)
     ctx_level = method.get_bytecode(current_bc_idx + 2)
     self_obj = get_self(frame, ctx_level)
     stack.push(self_obj.get_field(field_idx))
 
 
-@enable_shallow_tracing
-def _push_field_0(stack, frame):
+@jit.dont_look_inside
+def _push_field_0(stack, frame, dummy=False):
+    if dummy:
+        return
     self_obj = read_frame(frame, FRAME_AND_INNER_RCVR_IDX)
     stack.push(self_obj.get_field(0))
 
 
-@enable_shallow_tracing
-def _push_field_1(stack, frame):
+@jit.dont_look_inside
+def _push_field_1(stack, frame, dummy=False):
+    if dummy:
+        return
     self_obj = read_frame(frame, FRAME_AND_INNER_RCVR_IDX)
     stack.push(self_obj.get_field(1))
 
 
-@enable_shallow_tracing
-def _push_block(stack, method, current_bc_idx, frame):
+@jit.dont_look_inside
+def _push_block(stack, method, current_bc_idx, frame, dummy=False):
+    if dummy:
+        return
     block_method = method.get_constant(current_bc_idx)
     stack.push(BcBlock(block_method, get_inner_as_context(frame)))
 
 
-@enable_shallow_tracing
-def _push_block_no_ctx(stack, method, current_bc_idx):
+@jit.dont_look_inside
+def _push_block_no_ctx(stack, method, current_bc_idx, dummy=False):
+    if dummy:
+        return
     block_method = method.get_constant(current_bc_idx)
     stack.push(BcBlock(block_method, None))
 
 
-@enable_shallow_tracing
-def _push_constant(stack, method, current_bc_idx):
+@jit.dont_look_inside
+def _push_constant(stack, method, current_bc_idx, dummy=False):
+    if dummy:
+        return
     stack.push(method.get_constant(current_bc_idx))
 
 
-@enable_shallow_tracing
-def _push_constant_0(stack, method):
+@jit.dont_look_inside
+def _push_constant_0(stack, method, dummy=False):
     stack.push(method._literals[0])  # pylint: disable=protected-access
 
 
-@enable_shallow_tracing
-def _push_constant_1(stack, method):
+@jit.dont_look_inside
+def _push_constant_1(stack, method, dummy=False):
+    if dummy:
+        return
     stack.push(method._literals[1])  # pylint: disable=protected-access
 
 
-@enable_shallow_tracing
-def _push_constant_2(stack, method):
+@jit.dont_look_inside
+def _push_constant_2(stack, method, dummy=False):
+    if dummy:
+        return
     stack.push(method._literals[2])  # pylint: disable=protected-access
 
 
-@enable_shallow_tracing
-def _push_0(stack):
+@jit.dont_look_inside
+def _push_0(stack, dummy=False):
+    if dummy:
+        return
     stack.push(int_0)
 
 
-@enable_shallow_tracing
-def _push_1(stack):
+@jit.dont_look_inside
+def _push_1(stack, dummy=False):
+    if dummy:
+        return
     stack.push(int_1)
 
 
-@enable_shallow_tracing  # transformation can be done almost automatically!
-def _push_nil(stack):
+@jit.dont_look_inside
+def _push_nil(stack, dummy=False):
+    if dummy:
+        return
     stack.push(nilObject)
 
 
-@enable_shallow_tracing
-def _push_global(stack, method, current_universe, current_bc_idx, frame):
+@jit.dont_look_inside
+def _push_global(stack, method, current_universe, current_bc_idx, frame, dummy=False):
+    if dummy:
+        return
     global_name = method.get_constant(current_bc_idx)
     glob = current_universe.get_global(global_name)
 
@@ -431,37 +479,49 @@ def _push_global(stack, method, current_universe, current_bc_idx, frame):
         )
 
 
-@enable_shallow_tracing
-def _pop(stack):
+@jit.dont_look_inside
+def _pop(stack, dummy=False):
+    if dummy:
+        return
     stack.pop()
 
 
-@enable_shallow_tracing
-def _pop_frame(stack, method, current_bc_idx, frame):
+@jit.dont_look_inside
+def _pop_frame(stack, method, current_bc_idx, frame, dummy=False):
+    if dummy:
+        return
     value = stack.pop()
     write_frame(frame, method.get_bytecode(current_bc_idx + 1), value)
 
 
-@enable_shallow_tracing
-def _pop_frame_0(stack, frame):
+@jit.dont_look_inside
+def _pop_frame_0(stack, frame, dummy=False):
+    if dummy:
+        return
     value = stack.pop()
     write_frame(frame, FRAME_AND_INNER_RCVR_IDX + 0, value)
 
 
-@enable_shallow_tracing
-def _pop_frame_1(stack, frame):
+@jit.dont_look_inside
+def _pop_frame_1(stack, frame, dummy=False):
+    if dummy:
+        return
     value = stack.pop()
     write_frame(frame, FRAME_AND_INNER_RCVR_IDX + 1, value)
 
 
-@enable_shallow_tracing
-def _pop_frame_2(stack, frame):
+@jit.dont_look_inside
+def _pop_frame_2(stack, frame, dummy=False):
+    if dummy:
+        return
     value = stack.pop()
     write_frame(frame, FRAME_AND_INNER_RCVR_IDX + 2, value)
 
 
-@enable_shallow_tracing
-def _pop_inner(stack, method, current_bc_idx, frame):
+@jit.dont_look_inside
+def _pop_inner(stack, method, current_bc_idx, frame, dummy=False):
+    if dummy:
+        return
     idx = method.get_bytecode(current_bc_idx + 1)
     ctx_level = method.get_bytecode(current_bc_idx + 2)
     value = stack.pop()
@@ -473,40 +533,48 @@ def _pop_inner(stack, method, current_bc_idx, frame):
         block.set_outer(idx, value)
 
 
-@enable_shallow_tracing
-def _pop_inner_0(stack, frame):
+@jit.dont_look_inside
+def _pop_inner_0(stack, frame, dummy=False):
+    if dummy:
+        return
     value = stack.pop()
     write_inner(frame, FRAME_AND_INNER_RCVR_IDX + 0, value)
 
 
-@enable_shallow_tracing
-def _pop_inner_1(stack, frame):
+@jit.dont_look_inside
+def _pop_inner_1(stack, frame, dummy=False):
     value = stack.pop()
     write_inner(frame, FRAME_AND_INNER_RCVR_IDX + 1, value)
 
 
-@enable_shallow_tracing
-def _pop_inner_2(stack, frame):
+@jit.dont_look_inside
+def _pop_inner_2(stack, frame, dummy=False):
     value = stack.pop()
     write_inner(frame, FRAME_AND_INNER_RCVR_IDX + 2, value)
 
 
-@enable_shallow_tracing
-def _nil_frame(method, frame, current_bc_idx):
+@jit.dont_look_inside
+def _nil_frame(method, frame, current_bc_idx, dummy=False):
+    if dummy:
+        return
     if we_are_jitted():
         idx = method.get_bytecode(current_bc_idx + 1)
         write_frame(frame, idx, nilObject)
 
 
-@enable_shallow_tracing
-def _nil_inner(method, frame, current_bc_idx):
+@jit.dont_look_inside
+def _nil_inner(method, frame, current_bc_idx, dummy=False):
+    if dummy:
+        return
     if we_are_jitted():
         idx = method.get_bytecode(current_bc_idx + 1)
         write_inner(frame, idx, nilObject)
 
 
-@enable_shallow_tracing
-def _pop_field(stack, method, current_bc_idx, frame):
+@jit.dont_look_inside
+def _pop_field(stack, method, current_bc_idx, frame, dummy=False):
+    if dummy:
+        return
     field_idx = method.get_bytecode(current_bc_idx + 1)
     ctx_level = method.get_bytecode(current_bc_idx + 2)
     self_obj = get_self(frame, ctx_level)
@@ -515,16 +583,20 @@ def _pop_field(stack, method, current_bc_idx, frame):
     self_obj.set_field(field_idx, value)
 
 
-@enable_shallow_tracing
-def _pop_field_0(stack, frame):
+@jit.dont_look_inside
+def _pop_field_0(stack, frame, dummy=False):
+    if dummy:
+        return
     self_obj = read_frame(frame, FRAME_AND_INNER_RCVR_IDX)
 
     value = stack.pop()
     self_obj.set_field(0, value)
 
 
-@enable_shallow_tracing
-def _pop_field_1(stack, frame):
+@jit.dont_look_inside
+def _pop_field_1(stack, frame, dummy=False):
+    if dummy:
+        return
     self_obj = read_frame(frame, FRAME_AND_INNER_RCVR_IDX)
 
     value = stack.pop()
@@ -547,21 +619,27 @@ def _interpret_CALL_ASSEMBLER(
     return interpret_tier1(method, frame, 8, dummy=dummy)
 
 
-@enable_shallow_tracing
+@jit.dont_look_inside
 def _interpret_nlr_CALL_ASSEMBLER(
     frame, stack, current_bc_idx, entry_bc_idx, invokable, tstack, dummy=False
 ):
+    if dummy:
+        return
     return _interp_with_nlr(invokable, frame, 8, dummy)
 
 
-@enable_shallow_tracing_argn(1)
-def _create_frame_1(invokable, frame, stack):
+@jit.dont_look_inside
+def _create_frame_1(invokable, frame, stack, dummy=False):
+    if dummy:
+        return frame
     rcvr = stack.top()
     return create_frame_1(rcvr, invokable.get_size_frame(), invokable.get_size_inner())
 
 
-@enable_shallow_tracing_argn(1)
-def _create_frame_2(invokable, frame, stack):
+@jit.dont_look_inside
+def _create_frame_2(invokable, frame, stack, dummy=False):
+    if dummy:
+        return frame
     rcvr = stack.take(1)
     arg1 = stack.pop()
     return create_frame_2(
@@ -573,8 +651,10 @@ def _create_frame_2(invokable, frame, stack):
     )
 
 
-@enable_shallow_tracing_argn(1)
-def _create_frame_3(invokable, frame, stack):
+@jit.dont_look_inside
+def _create_frame_3(invokable, frame, stack, dummy=False):
+    if dummy:
+        return
     rcvr = stack.take(2)
     arg2 = stack.pop()
     arg1 = stack.pop()
@@ -588,8 +668,10 @@ def _create_frame_3(invokable, frame, stack):
     )
 
 
-@enable_shallow_tracing_argn(2)
-def _send_1(method, current_bc_idx, next_bc_idx, stack):
+@jit.dont_look_inside
+def _send_1(method, current_bc_idx, next_bc_idx, stack, dummy=False):
+    if dummy:
+        return next_bc_idx
     from som.vmobjects.method_bc import BcMethod
     from som.vm.current import current_universe
     from som.statistics import statistics
@@ -625,8 +707,10 @@ def _send_1(method, current_bc_idx, next_bc_idx, stack):
     return next_bc_idx
 
 
-@enable_shallow_tracing_argn(2)
-def _send_2(method, current_bc_idx, next_bc_idx, stack):
+@jit.dont_look_inside
+def _send_2(method, current_bc_idx, next_bc_idx, stack, dummy=False):
+    if dummy:
+        return next_bc_idx
     from som.vmobjects.method_bc import BcMethod, BcMethodNLR
     from som.vm.current import current_universe
     from som.statistics import statistics
@@ -661,8 +745,10 @@ def _send_2(method, current_bc_idx, next_bc_idx, stack):
     return next_bc_idx
 
 
-@enable_shallow_tracing_argn(2)
-def _send_3(method, current_bc_idx, next_bc_idx, stack):
+@jit.dont_look_inside
+def _send_3(method, current_bc_idx, next_bc_idx, stack, dummy=False):
+    if dummy:
+        return next_bc_idx
     from som.vmobjects.method_bc import BcMethod
     from som.vm.current import current_universe
     from som.statistics import statistics
@@ -695,8 +781,10 @@ def _send_3(method, current_bc_idx, next_bc_idx, stack):
     return next_bc_idx
 
 
-@enable_shallow_tracing_argn(2)
-def _send_n(method, current_bc_idx, next_bc_idx, stack):
+@jit.dont_look_inside
+def _send_n(method, current_bc_idx, next_bc_idx, stack, dummy=False):
+    if dummy:
+        return next_bc_idx
     from som.vm.current import current_universe
     from som.statistics import statistics
 
@@ -724,8 +812,10 @@ def _send_n(method, current_bc_idx, next_bc_idx, stack):
     return next_bc_idx
 
 
-@enable_shallow_tracing
-def _inc(stack):
+@jit.dont_look_inside
+def _inc(stack, dummy=False):
+    if dummy:
+        return
     val = stack.pop()
 
     from som.vmobjects.integer import Integer
@@ -744,8 +834,10 @@ def _inc(stack):
     stack.push(result)
 
 
-@enable_shallow_tracing
-def _dec(stack):
+@jit.dont_look_inside
+def _dec(stack, dummy=False):
+    if dummy:
+        return
     val = stack.pop()
     from som.vmobjects.integer import Integer
     from som.vmobjects.double import Double
@@ -762,8 +854,10 @@ def _dec(stack):
     stack.push(result)
 
 
-@enable_shallow_tracing
-def _inc_field(method, frame, current_bc_idx):
+@jit.dont_look_inside
+def _inc_field(method, frame, current_bc_idx, dummy=False):
+    if dummy:
+        return
     field_idx = method.get_bytecode(current_bc_idx + 1)
     ctx_level = method.get_bytecode(current_bc_idx + 2)
     self_obj = get_self(frame, ctx_level)
@@ -771,8 +865,10 @@ def _inc_field(method, frame, current_bc_idx):
     self_obj.inc_field(field_idx)
 
 
-@enable_shallow_tracing
-def _inc_field_push(stack, method, frame, current_bc_idx):
+@jit.dont_look_inside
+def _inc_field_push(stack, method, frame, current_bc_idx, dummy=False):
+    if dummy:
+        return
     field_idx = method.get_bytecode(current_bc_idx + 1)
     ctx_level = method.get_bytecode(current_bc_idx + 2)
     self_obj = get_self(frame, ctx_level)
@@ -780,23 +876,29 @@ def _inc_field_push(stack, method, frame, current_bc_idx):
     stack.push(self_obj.inc_field(field_idx))
 
 
-@enable_shallow_tracing
-def _q_super_send_1(stack, method, current_bc_idx):
+@jit.dont_look_inside
+def _q_super_send_1(stack, method, current_bc_idx, dummy=False):
+    if dummy:
+        return
     invokable = method.get_inline_cache_invokable(current_bc_idx)
     value = invokable.invoke_1(stack.pop())
     stack.push(value)
 
 
-@enable_shallow_tracing
-def _q_super_send_2(stack, method, current_bc_idx):
+@jit.dont_look_inside
+def _q_super_send_2(stack, method, current_bc_idx, dummy=False):
+    if dummy:
+        return
     invokable = method.get_inline_cache_invokable(current_bc_idx)
     arg = stack.pop()
     value = invokable.invoke_2(stack.pop(), arg)
     stack.push(value)
 
 
-@enable_shallow_tracing
-def _q_super_send_3(stack, method, current_bc_idx):
+@jit.dont_look_inside
+def _q_super_send_3(stack, method, current_bc_idx, dummy=False):
+    if dummy:
+        return
     invokable = method.get_inline_cache_invokable(current_bc_idx)
     arg2 = stack.pop()
     arg1 = stack.pop()
@@ -805,38 +907,48 @@ def _q_super_send_3(stack, method, current_bc_idx):
     stack.push(value)
 
 
-@enable_shallow_tracing
-def _q_super_send_n(stack, method, current_bc_idx):
+@jit.dont_look_inside
+def _q_super_send_n(stack, method, current_bc_idx, dummy=False):
+    if dummy:
+        return
     invokable = method.get_inline_cache_invokable(current_bc_idx)
     stack.stack_ptr = invokable.invoke_n(stack.items, stack.stack_ptr)
 
 
-@enable_shallow_tracing_argn(2)
-def _push_local(method, current_bc_idx, next_bc_idx):
+@jit.dont_look_inside
+def _push_local(method, current_bc_idx, next_bc_idx, dummy=False):
+    if dummy:
+        return next_bc_idx
     method.patch_variable_access(current_bc_idx)
     # retry bytecode after patching
     next_bc_idx = current_bc_idx
     return next_bc_idx
 
 
-@enable_shallow_tracing_argn(2)
-def _push_argument(method, current_bc_idx, next_bc_idx):
+@jit.dont_look_inside
+def _push_argument(method, current_bc_idx, next_bc_idx, dummy=False):
+    if dummy:
+        return next_bc_idx
     method.patch_variable_access(current_bc_idx)
     # retry bytecode after patching
     next_bc_idx = current_bc_idx
     return next_bc_idx
 
 
-@enable_shallow_tracing_argn(2)
-def _pop_local(method, current_bc_idx, next_bc_idx):
+@jit.dont_look_inside
+def _pop_local(method, current_bc_idx, next_bc_idx, dummy=False):
+    if dummy:
+        return next_bc_idx
     method.patch_variable_access(current_bc_idx)
     # retry bytecode after patching
     next_bc_idx = current_bc_idx
     return next_bc_idx
 
 
-@enable_shallow_tracing_argn(2)
-def _pop_argument(method, current_bc_idx, next_bc_idx):
+@jit.dont_look_inside
+def _pop_argument(method, current_bc_idx, next_bc_idx, dummy=False):
+    if dummy:
+        return next_bc_idx
     method.patch_variable_access(current_bc_idx)
     # retry bytecode after patching
     next_bc_idx = current_bc_idx
@@ -1063,125 +1175,238 @@ def interpret_tier1(
             return _halt(stack)
 
         if bytecode == Bytecodes.dup:
-            _dup(stack)
+            if we_are_jitted():
+                _dup(stack, True)
+            else:
+                _dup(stack)
 
         elif bytecode == Bytecodes.dup_second:
-            _dup_second(stack)
+            if we_are_jitted():
+                _dup_second(stack, True)
+            else:
+                _dup_second(stack)
 
         elif bytecode == Bytecodes.push_frame:
-            _push_frame(stack, method, current_bc_idx, frame)
+            if we_are_jitted():
+                _push_frame(stack, method, current_bc_idx, frame, True)
+            else:
+                _push_frame(stack, method, current_bc_idx, frame)
 
         elif bytecode == Bytecodes.push_frame_0:
-            _push_frame_0(stack, frame)
+            if we_are_jitted():
+                _push_frame_0(stack, frame, True)
+            else:
+                _push_frame_0(stack, frame)
 
         elif bytecode == Bytecodes.push_frame_1:
-            _push_frame_1(stack, frame)
+            if we_are_jitted():
+                _push_frame_1(stack, frame, True)
+            else:
+                _push_frame_1(stack, frame)
 
         elif bytecode == Bytecodes.push_frame_2:
-            _push_frame_2(stack, frame)
+            if we_are_jitted():
+                _push_frame_2(stack, frame, True)
+            else:
+                _push_frame_2(stack, frame)
 
         elif bytecode == Bytecodes.push_inner:
-            _push_inner(stack, method, current_bc_idx, frame)
+            if we_are_jitted():
+                _push_inner(stack, method, current_bc_idx, frame, True)
+            else:
+                _push_inner(stack, method, current_bc_idx, frame)
 
         elif bytecode == Bytecodes.push_inner_0:
-            _push_inner_0(stack, frame)
+            if we_are_jitted():
+                _push_inner_0(stack, frame, True)
+            else:
+                _push_inner_0(stack, frame)
 
         elif bytecode == Bytecodes.push_inner_1:
-            _push_inner_1(stack, frame)
+            if we_are_jitted():
+                _push_inner_1(stack, frame, True)
+            else:
+                _push_inner_1(stack, frame)
 
         elif bytecode == Bytecodes.push_inner_2:
-            _push_inner_2(stack, frame)
+            if we_are_jitted():
+                _push_inner_2(stack, frame, True)
+            else:
+                _push_inner_2(stack, frame)
 
         elif bytecode == Bytecodes.push_field:
-            _push_field(stack, method, current_bc_idx, frame)
+            if we_are_jitted():
+                _push_field(stack, method, current_bc_idx, frame, True)
+            else:
+                _push_field(stack, method, current_bc_idx, frame)
 
         elif bytecode == Bytecodes.push_field_0:
-            _push_field_0(stack, frame)
+            if we_are_jitted():
+                _push_field_0(stack, frame, True)
+            else:
+                _push_field_0(stack, frame)
 
         elif bytecode == Bytecodes.push_field_1:
-            _push_field_1(stack, frame)
+            if we_are_jitted():
+                _push_field_1(stack, frame, True)
+            else:
+                _push_field_1(stack, frame)
 
         elif bytecode == Bytecodes.push_block:
-            _push_block(stack, method, current_bc_idx, frame)
+            if we_are_jitted():
+                _push_block(stack, method, current_bc_idx, frame, True)
+            else:
+                _push_block(stack, method, current_bc_idx, frame)
 
         elif bytecode == Bytecodes.push_block_no_ctx:
-            _push_block_no_ctx(stack, method, current_bc_idx)
+            if we_are_jitted():
+                _push_block_no_ctx(stack, method, current_bc_idx, True)
+            else:
+                _push_block_no_ctx(stack, method, current_bc_idx)
 
         elif bytecode == Bytecodes.push_constant:
-            _push_constant(stack, method, current_bc_idx)
+            if we_are_jitted():
+                _push_constant(stack, method, current_bc_idx, True)
+            else:
+                _push_constant(stack, method, current_bc_idx)
 
         elif bytecode == Bytecodes.push_constant_0:
-            _push_constant_0(stack, method)
+            if we_are_jitted():
+                _push_constant_0(stack, method, True)
+            else:
+                _push_constant_0(stack, method)
 
         elif bytecode == Bytecodes.push_constant_1:
-            _push_constant_1(stack, method)
+            if we_are_jitted():
+                _push_constant_1(stack, method, True)
+            else:
+                _push_constant_1(stack, method)
+
 
         elif bytecode == Bytecodes.push_constant_2:
-            _push_constant_2(stack, method)
+            if we_are_jitted():
+                _push_constant_2(stack, method, True)
+            else:
+                _push_constant_2(stack, method)
 
         elif bytecode == Bytecodes.push_0:
-            _push_0(stack)
+            if we_are_jitted():
+                _push_0(stack, True)
+            else:
+                _push_0(stack)
 
         elif bytecode == Bytecodes.push_1:
-            _push_1(stack)
+            if we_are_jitted():
+                _push_1(stack, True)
+            else:
+                _push_1(stack)
 
         elif bytecode == Bytecodes.push_nil:
-            _push_nil(stack)
+            if we_are_jitted():
+                _push_nil(stack, True)
+            else:
+                _push_nil(stack)
 
         elif bytecode == Bytecodes.push_global:
-            _push_global(stack, method, current_universe, current_bc_idx, frame)
+            if we_are_jitted():
+                _push_global(stack, method, current_universe, current_bc_idx, frame, True)
+            else:
+                _push_global(stack, method, current_universe, current_bc_idx, frame)
 
         elif bytecode == Bytecodes.pop:
-            _pop(stack)
+            if we_are_jitted():
+                _pop(stack, True)
+            else:
+                _pop(stack)
 
         elif bytecode == Bytecodes.pop_frame:
-            _pop_frame(stack, method, current_bc_idx, frame)
+            if we_are_jitted():
+                _pop_frame(stack, method, current_bc_idx, frame, True)
+            else:
+                _pop_frame(stack, method, current_bc_idx, frame)
 
         elif bytecode == Bytecodes.pop_frame_0:
-            _pop_frame_0(stack, frame)
+            if we_are_jitted():
+                _pop_frame_0(stack, frame, True)
+            else:
+                _pop_frame_0(stack, frame)
 
         elif bytecode == Bytecodes.pop_frame_1:
-            _pop_frame_1(stack, frame)
+            if we_are_jitted():
+                _pop_frame_1(stack, frame, True)
+            else:
+                _pop_frame_1(stack, frame)
 
         elif bytecode == Bytecodes.pop_frame_2:
-            _pop_frame_2(stack, frame)
+            if we_are_jitted():
+                _pop_frame_2(stack, frame, True)
+            else:
+                _pop_frame_2(stack, frame)
 
         elif bytecode == Bytecodes.pop_inner:
-            _pop_inner(stack, method, current_bc_idx, frame)
+            if we_are_jitted():
+                _pop_inner(stack, method, current_bc_idx, frame, True)
+            else:
+                _pop_inner(stack, method, current_bc_idx, frame)
 
         elif bytecode == Bytecodes.pop_inner_0:
-            _pop_inner_0(stack, frame)
+            if we_are_jitted():
+                _pop_inner_0(stack, frame, True)
+            else:
+                _pop_inner_0(stack, frame)
 
         elif bytecode == Bytecodes.pop_inner_1:
-            _pop_inner_1(stack, frame)
+            if we_are_jitted():
+                _pop_inner_1(stack, frame, True)
+            else:
+                _pop_inner_1(stack, frame)
 
         elif bytecode == Bytecodes.pop_inner_2:
-            _pop_inner_2(stack, frame)
+            if we_are_jitted():
+                _pop_inner_2(stack, frame, True)
+            else:
+                _pop_inner_2(stack, frame)
 
         elif bytecode == Bytecodes.nil_frame:
-            _nil_frame(method, frame, current_bc_idx)
+            if we_are_jitted():
+                _nil_frame(method, frame, current_bc_idx, True)
+            else:
+                _nil_frame(method, frame, current_bc_idx)
 
         elif bytecode == Bytecodes.nil_inner:
-            _nil_inner(method, frame, current_bc_idx)
+            if we_are_jitted():
+                _nil_inner(method, frame, current_bc_idx, True)
+            else:
+                _nil_inner(method, frame, current_bc_idx)
 
         elif bytecode == Bytecodes.pop_field:
-            _pop_field(stack, method, current_bc_idx, frame)
+            if we_are_jitted():
+                _pop_field(stack, method, current_bc_idx, frame, True)
+            else:
+                _pop_field(stack, method, current_bc_idx, frame)
 
         elif bytecode == Bytecodes.pop_field_0:
-            _pop_field_0(stack, frame)
+            if we_are_jitted():
+                _pop_field_0(stack, frame, True)
+            else:
+                _pop_field_0(stack, frame)
 
         elif bytecode == Bytecodes.pop_field_1:
-            _pop_field_1(stack, frame)
+            if we_are_jitted():
+                _pop_field_1(stack, frame, True)
+            else:
+                _pop_field_1(stack, frame)
 
         elif bytecode == Bytecodes.send_1:
-            rcvr_type = method.get_receiver_type(current_bc_idx)
             if we_are_jitted():
+                rcvr_type = method.get_receiver_type(current_bc_idx)
                 if rcvr_type is None:
                     next_bc_idx = _send_1(
                         method,
                         current_bc_idx,
                         next_bc_idx,
                         stack,
+                        True
                     )
                 else:
                     # Polymorphic inline chache optimization for send instruction
@@ -1204,7 +1429,7 @@ def interpret_tier1(
                     # guard to check the type of rcvr equals to rcvr_type
                     if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
                         invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
-                        new_frame = _create_frame_1(invokable, frame, stack)
+                        new_frame = _create_frame_1(invokable, frame, stack, True)
                         new_stack = Stack(16)
                         # turn this method invocation into direct call to compiled code
                         result = _interpret_CALL_ASSEMBLER(
@@ -1216,7 +1441,7 @@ def interpret_tier1(
                             tstack=t_empty(),
                             dummy=True,
                         )
-                        stack.insert(0, result)
+                        stack.insert(0, result, True)
                         # This path is a slow path, going this way when the rcvr type is
                         # different from when it is compiled
                         begin_slow_path(frame, stack)
@@ -1225,26 +1450,28 @@ def interpret_tier1(
                             current_bc_idx,
                             next_bc_idx,
                             stack,
+                            True
                         )
                         end_slow_path(frame, stack)
             else:
                 next_bc_idx = _send_1(method, current_bc_idx, next_bc_idx, stack)
 
         elif bytecode == Bytecodes.send_2:
-            rcvr_type = method.get_receiver_type(current_bc_idx)
             if we_are_jitted():
+                rcvr_type = method.get_receiver_type(current_bc_idx)
                 if rcvr_type is None:
                     next_bc_idx = _send_2(
                         method,
                         current_bc_idx,
                         next_bc_idx,
                         stack,
+                        True
                     )
                 else:
                     rcvr = stack.take(1, dummy=True)
                     if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
                         invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
-                        new_frame = _create_frame_2(invokable, frame, stack)
+                        new_frame = _create_frame_2(invokable, frame, stack, True)
                         new_stack = Stack(16)
                         result = _interpret_CALL_ASSEMBLER(
                             frame=new_frame,
@@ -1255,7 +1482,7 @@ def interpret_tier1(
                             tstack=t_empty(),
                             dummy=True,
                         )
-                        stack.insert(0, result)
+                        stack.insert(0, result, True)
                         # ---------------------------------------------------------------
                         begin_slow_path(frame, stack)
                         next_bc_idx = _send_2(
@@ -1263,6 +1490,7 @@ def interpret_tier1(
                             current_bc_idx,
                             next_bc_idx,
                             stack,
+                            True
                         )
                         end_slow_path(frame, stack)
                         # ---------------------------------------------------------------
@@ -1275,20 +1503,21 @@ def interpret_tier1(
                 )
 
         elif bytecode == Bytecodes.send_3:
-            rcvr_type = method.get_receiver_type(current_bc_idx)
             if we_are_jitted():
+                rcvr_type = method.get_receiver_type(current_bc_idx)
                 if rcvr_type is None:
                     next_bc_idx = _send_3(
                         method,
                         current_bc_idx,
                         next_bc_idx,
                         stack,
+                        True
                     )
                 else:
                     rcvr = stack.take(2, dummy=True)
                     if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
                         invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
-                        new_frame = _create_frame_3(invokable, frame, stack)
+                        new_frame = _create_frame_3(invokable, frame, stack, True)
                         new_stack = Stack(16)
                         result = _interpret_CALL_ASSEMBLER(
                             frame=new_frame,
@@ -1299,7 +1528,7 @@ def interpret_tier1(
                             tstack=t_empty(),
                             dummy=True,
                         )
-                        stack.insert(0, result)
+                        stack.insert(0, result, True)
                         # ---------------------------------------------------------------
                         begin_slow_path(frame, stack)
                         next_bc_idx = _send_3(
@@ -1307,6 +1536,7 @@ def interpret_tier1(
                             current_bc_idx,
                             next_bc_idx,
                             stack,
+                            True
                         )
                         end_slow_path(frame, stack)
                         # ---------------------------------------------------------------
@@ -1314,10 +1544,16 @@ def interpret_tier1(
                 next_bc_idx = _send_3(method, current_bc_idx, next_bc_idx, stack)
 
         elif bytecode == Bytecodes.send_n:
-            next_bc_idx = _send_n(method, current_bc_idx, next_bc_idx, stack)
+            if we_are_jitted():
+                next_bc_idx = _send_n(method, current_bc_idx, next_bc_idx, stack, True)
+            else:
+                next_bc_idx = _send_n(method, current_bc_idx, next_bc_idx, stack)
 
         elif bytecode == Bytecodes.super_send:
-            _do_super_send(stack, current_bc_idx, method)
+            if we_are_jitted():
+                _do_super_send(stack, current_bc_idx, method, True)
+            else:
+                _do_super_send(stack, current_bc_idx, method)
 
         elif bytecode == Bytecodes.return_local:
             if we_are_jitted():
@@ -1347,7 +1583,7 @@ def interpret_tier1(
                 if tstack.t_is_empty():
                     val = stack.top()
                     ret_object = _do_return_non_local(
-                        val, frame, method.get_bytecode(current_bc_idx + 1)
+                        val, frame, method.get_bytecode(current_bc_idx + 1), True
                     )
                     # next_bc_idx = emit_ret(entry_bc_idx, ret_object)
                     jit.emit_ret(ret_object)
@@ -1363,7 +1599,7 @@ def interpret_tier1(
                 else:
                     val = stack.top()
                     ret_object = _do_return_non_local(
-                        val, frame, method.get_bytecode(current_bc_idx + 1)
+                        val, frame, method.get_bytecode(current_bc_idx + 1), True
                     )
                     next_bc_idx, tstack = tstack.t_pop()
                     # next_bc_idx = emit_ret(next_bc_idx, ret_object)
@@ -1398,10 +1634,16 @@ def interpret_tier1(
                 return _return_self(frame)
 
         elif bytecode == Bytecodes.inc:
-            _inc(stack)
+            if we_are_jitted():
+                _inc(stack, True)
+            else:
+                _inc(stack)
 
         elif bytecode == Bytecodes.dec:
-            _dec(stack)
+            if we_are_jitted():
+                _dec(stack, True)
+            else:
+                _dec(stack)
 
         elif bytecode == Bytecodes.jump:
             next_bc_idx = current_bc_idx + method.get_bytecode(current_bc_idx + 1)
@@ -1410,7 +1652,7 @@ def interpret_tier1(
             target_bc_idx = current_bc_idx + method.get_bytecode(current_bc_idx + 1)
             if we_are_jitted():
                 if _is_true_object(stack, dummy=True):
-                    stack.push(nilObject)
+                    stack.push(nilObject, True)
                     tstack = t_push(next_bc_idx, tstack)
                     next_bc_idx = target_bc_idx
                 else:
@@ -1424,7 +1666,7 @@ def interpret_tier1(
             target_bc_idx = current_bc_idx + method.get_bytecode(current_bc_idx + 1)
             if we_are_jitted():
                 if _is_false_object(stack, dummy=True):
-                    stack.push(nilObject)
+                    stack.push(nilObject, True)
                     tstack = t_push(next_bc_idx, tstack)
                     next_bc_idx = target_bc_idx
                 else:
@@ -1516,7 +1758,7 @@ def interpret_tier1(
             )
             if we_are_jitted():
                 if _is_true_object(stack, dummy=True):
-                    stack.push(nilObject)
+                    stack.push(nilObject, True)
                     tstack = t_push(next_bc_idx, tstack)
                     next_bc_idx = target_bc_idx
                 else:
@@ -1534,7 +1776,7 @@ def interpret_tier1(
             )
             if we_are_jitted():
                 if _is_false_object(stack, dummy=True):
-                    stack.push(nilObject)
+                    stack.push(nilObject, True)
                     tstack = t_push(next_bc_idx, tstack)
                     next_bc_idx = target_bc_idx
                 else:
@@ -1625,28 +1867,52 @@ def interpret_tier1(
                 next_bc_idx = entry_bc_idx = target_bc_idx
 
         elif bytecode == Bytecodes.q_super_send_1:
-            _q_super_send_1(stack, method, current_bc_idx)
+            if we_are_jitted():
+                _q_super_send_1(stack, method, current_bc_idx, True)
+            else:
+                _q_super_send_1(stack, method, current_bc_idx)
 
         elif bytecode == Bytecodes.q_super_send_2:
-            _q_super_send_2(stack, method, current_bc_idx)
+            if we_are_jitted():
+                _q_super_send_2(stack, method, current_bc_idx, True)
+            else:
+                _q_super_send_2(stack, method, current_bc_idx)
 
         elif bytecode == Bytecodes.q_super_send_3:
-            _q_super_send_3(stack, method, current_bc_idx)
+            if we_are_jitted():
+                _q_super_send_3(stack, method, current_bc_idx, True)
+            else:
+                _q_super_send_3(stack, method, current_bc_idx)
 
         elif bytecode == Bytecodes.q_super_send_n:
-            _q_super_send_n(stack, method, current_bc_idx)
+            if we_are_jitted():
+                _q_super_send_n(stack, method, current_bc_idx, True)
+            else:
+                _q_super_send_n(stack, method, current_bc_idx)
 
         elif bytecode == Bytecodes.push_local:
-            next_bc_idx = _push_local(method, current_bc_idx, next_bc_idx)
+            if we_are_jitted():
+                next_bc_idx = _push_local(method, current_bc_idx, next_bc_idx, True)
+            else:
+                next_bc_idx = _push_local(method, current_bc_idx, next_bc_idx)
 
         elif bytecode == Bytecodes.push_argument:
-            next_bc_idx = _push_argument(method, current_bc_idx, next_bc_idx)
+            if we_are_jitted():
+                next_bc_idx = _push_argument(method, current_bc_idx, next_bc_idx, True)
+            else:
+                next_bc_idx = _push_argument(method, current_bc_idx, next_bc_idx)
 
         elif bytecode == Bytecodes.pop_local:
-            next_bc_idx = _pop_local(method, current_bc_idx, next_bc_idx)
+            if we_are_jitted():
+                next_bc_idx = _pop_local(method, current_bc_idx, next_bc_idx, True)
+            else:
+                next_bc_idx = _pop_local(method, current_bc_idx, next_bc_idx)
 
         elif bytecode == Bytecodes.pop_argument:
-            next_bc_idx = _pop_argument(method, current_bc_idx, next_bc_idx)
+            if we_are_jitted():
+                next_bc_idx = _pop_argument(method, current_bc_idx, next_bc_idx, True)
+            else:
+                next_bc_idx = _pop_argument(method, current_bc_idx, next_bc_idx)
 
         elif bytecode == Bytecodes.nil_local:
             method.patch_variable_access(current_bc_idx)
@@ -2351,8 +2617,10 @@ def _update_object_and_invalidate_old_caches(obj, method, bytecode_index, univer
         method.set_inline_cache(bytecode_index + 1, None, None)
 
 
-@enable_shallow_tracing
-def _send_does_not_understand(receiver, selector, stack):
+@jit.dont_look_inside
+def _send_does_not_understand(receiver, selector, stack, dummy=False):
+    if dummy:
+        return
     # ignore self
     number_of_arguments = selector.get_number_of_signature_arguments() - 1
     arguments_array = Array.from_size(number_of_arguments)
