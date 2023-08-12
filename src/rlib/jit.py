@@ -11,6 +11,8 @@ try:
     from rpython.rlib.jit import not_in_trace  # pylint: disable=unused-import
     from rpython.rlib.jit import emit_jump  # pylint: disable=unused-import
     from rpython.rlib.jit import emit_ret  # pylint: disable=unused-import
+    from rpython.rlib.jit import begin_slow_path  # pylint: disable=unused-import
+    from rpython.rlib.jit import end_slow_path  # pylint: disable=unused-import
 except ImportError:
     "NOT_RPYTHON"
 
@@ -75,4 +77,10 @@ except ImportError:
         pass
 
     def emit_ret(x):  # pylint: disable=no-self-argument
+        pass
+
+    def begin_slow_path():
+        pass
+
+    def end_slow_path():
         pass

@@ -93,36 +93,6 @@ def enable_shallow_tracing_argn(argn):
     return enable_shallow_tracing
 
 
-def enable_shallow_tracing_with_value(value):
-    def enable_shallow_tracing(func):
-        """
-        A decorator to enable an actual handler to do shallow tracing.
-        Use this decorator for a functio that returns a value.
-        """
-        always_inline(func)  # tell RPython to inline
-
-        @dont_look_inside
-        def shallow_hanlder(*args):
-            dummy = args[-1]
-            args = args[:-1]
-            if dummy:
-                return value
-            return func(*args)
-
-        shallow_hanlder.func_name = "handler_" + func.func_name
-
-        @always_inline
-        def call_handler(*args):
-            if we_are_jitted():
-                return shallow_hanlder(*args + (True,))
-            else:
-                return shallow_hanlder(*args + (False,))
-
-        return call_handler
-
-    return enable_shallow_tracing
-
-
 TRACE_THRESHOLD = 1039 / 2
 
 
@@ -1174,8 +1144,8 @@ def interpret_tier1(
             _pop_field_1(stack, frame)
 
         elif bytecode == Bytecodes.send_1:
-            rcvr_type = method.get_receiver_type(current_bc_idx)
             if we_are_jitted():
+                rcvr_type = method.get_receiver_type(current_bc_idx)
                 if rcvr_type is None:
                     next_bc_idx = _send_1(
                         method,
@@ -1219,20 +1189,20 @@ def interpret_tier1(
                         stack.insert(0, result)
                         # This path is a slow path, going this way when the rcvr type is
                         # different from when it is compiled
-                        begin_slow_path(frame, stack)
+                        jit.begin_slow_path()
                         next_bc_idx = _send_1(
                             method,
                             current_bc_idx,
                             next_bc_idx,
                             stack,
                         )
-                        end_slow_path(frame, stack)
+                        jit.end_slow_path()
             else:
                 next_bc_idx = _send_1(method, current_bc_idx, next_bc_idx, stack)
 
         elif bytecode == Bytecodes.send_2:
-            rcvr_type = method.get_receiver_type(current_bc_idx)
             if we_are_jitted():
+                rcvr_type = method.get_receiver_type(current_bc_idx)
                 if rcvr_type is None:
                     next_bc_idx = _send_2(
                         method,
@@ -1257,14 +1227,14 @@ def interpret_tier1(
                         )
                         stack.insert(0, result)
                         # ---------------------------------------------------------------
-                        begin_slow_path(frame, stack)
+                        jit.begin_slow_path()
                         next_bc_idx = _send_2(
                             method,
                             current_bc_idx,
                             next_bc_idx,
                             stack,
                         )
-                        end_slow_path(frame, stack)
+                        jit.end_slow_path()
                         # ---------------------------------------------------------------
             else:
                 next_bc_idx = _send_2(
@@ -1275,8 +1245,8 @@ def interpret_tier1(
                 )
 
         elif bytecode == Bytecodes.send_3:
-            rcvr_type = method.get_receiver_type(current_bc_idx)
             if we_are_jitted():
+                rcvr_type = method.get_receiver_type(current_bc_idx)
                 if rcvr_type is None:
                     next_bc_idx = _send_3(
                         method,
@@ -1301,14 +1271,14 @@ def interpret_tier1(
                         )
                         stack.insert(0, result)
                         # ---------------------------------------------------------------
-                        begin_slow_path(frame, stack)
+                        jit.begin_slow_path()
                         next_bc_idx = _send_3(
                             method,
                             current_bc_idx,
                             next_bc_idx,
                             stack,
                         )
-                        end_slow_path(frame, stack)
+                        jit.end_slow_path()
                         # ---------------------------------------------------------------
             else:
                 next_bc_idx = _send_3(method, current_bc_idx, next_bc_idx, stack)
