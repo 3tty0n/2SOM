@@ -7,9 +7,9 @@ from som.interpreter.ast.frame import (
     get_inner_as_context,
     create_frame_1,
     create_frame_2,
-    create_frame_3,
     mark_as_no_longer_on_stack,
 )
+from som.interpreter.bc.frame import create_frame_3, create_frame
 from som.interpreter.bc.bytecodes import bytecode_length, Bytecodes, bytecode_as_str
 from som.interpreter.bc.frame import (
     get_block_at,
@@ -549,12 +549,24 @@ def _create_frame_3(invokable, frame, stack):
     arg2 = stack.pop()
     arg1 = stack.pop()
     return create_frame_3(
-        rcvr,
-        arg1,
-        arg2,
         invokable.get_arg_inner_access(),
         invokable.get_size_frame(),
         invokable.get_size_inner(),
+        rcvr,
+        arg1,
+        arg2,
+    )
+
+
+@enable_shallow_tracing_argn(1)
+def _create_frame(invokable, frame, stack):
+    return create_frame(
+        invokable.get_arg_inner_access(),
+        invokable.get_size_frame(),
+        invokable.get_size_inner(),
+        stack.items,
+        stack.stack_ptr,
+        invokable.get_number_of_arguments()
     )
 
 
@@ -667,6 +679,7 @@ def _send_3(method, current_bc_idx, next_bc_idx, stack):
 
 @enable_shallow_tracing_argn(2)
 def _send_n(method, current_bc_idx, next_bc_idx, stack):
+    from som.vmobjects.method_bc import BcMethod
     from som.vm.current import current_universe
     from som.statistics import statistics
 
@@ -679,6 +692,11 @@ def _send_n(method, current_bc_idx, next_bc_idx, stack):
     invokable = _lookup(layout, signature, method, current_bc_idx)
 
     if not we_are_jitted():
+        if isinstance(invokable, BcMethod):
+            rcvr_type = receiver.get_class(current_universe)
+            method.set_receiver_type(current_bc_idx, rcvr_type)
+
+    if not we_are_translated():
         statistics.incr(invokable)
 
     if invokable is not None:
@@ -1284,7 +1302,44 @@ def interpret_tier1(
                 next_bc_idx = _send_3(method, current_bc_idx, next_bc_idx, stack)
 
         elif bytecode == Bytecodes.send_n:
-            next_bc_idx = _send_n(method, current_bc_idx, next_bc_idx, stack)
+            if we_are_jitted():
+                rcvr_type = method.get_receiver_type(current_bc_idx)
+                if rcvr_type is None:
+                    next_bc_idx = _send_n(
+                        method,
+                        current_bc_idx,
+                        next_bc_idx,
+                        stack,
+                    )
+                else:
+                    signature = method.get_constant(current_bc_idx)
+                    rcvr = stack.take((signature.get_number_of_signature_arguments() - 1), dummy=True)
+                    if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
+                        invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
+                        new_frame = _create_frame(invokable, frame, stack)
+                        new_stack = Stack(16)
+                        result = _interpret_CALL_ASSEMBLER(
+                            frame=new_frame,
+                            stack=new_stack,
+                            current_bc_idx=0,
+                            entry_bc_idx=0,
+                            method=invokable,
+                            tstack=t_empty(),
+                            dummy=True,
+                        )
+                        stack.insert(0, result)
+                        # ---------------------------------------------------------------
+                        jit.begin_slow_path()
+                        next_bc_idx = _send_n(
+                            method,
+                            current_bc_idx,
+                            next_bc_idx,
+                            stack,
+                        )
+                        jit.end_slow_path()
+                        # ---------------------------------------------------------------
+            else:
+                next_bc_idx = _send_n(method, current_bc_idx, next_bc_idx, stack)
 
         elif bytecode == Bytecodes.super_send:
             _do_super_send(stack, current_bc_idx, method)
