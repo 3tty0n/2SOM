@@ -581,6 +581,7 @@ def _send_1(method, current_bc_idx, next_bc_idx, stack):
 
     layout = receiver.get_object_layout(current_universe)
     invokable = _lookup(layout, signature, method, current_bc_idx)
+    #invokable = layout.lookup_invokable(signature)
 
     if not we_are_jitted():
         if isinstance(invokable, BcMethod):
@@ -620,6 +621,7 @@ def _send_2(method, current_bc_idx, next_bc_idx, stack):
 
     layout = receiver.get_object_layout(current_universe)
     invokable = _lookup(layout, signature, method, current_bc_idx)
+    #invokable = layout.lookup_invokable(signature)
 
     if not we_are_jitted():
         if isinstance(invokable, BcMethod):
@@ -653,6 +655,7 @@ def _send_3(method, current_bc_idx, next_bc_idx, stack):
     receiver = stack.take(2)
     layout = receiver.get_object_layout(current_universe)
     invokable = _lookup(layout, signature, method, current_bc_idx)
+    #invokable = layout.lookup_invokable(signature)
 
     if not we_are_jitted():
         if isinstance(invokable, BcMethod):
@@ -690,6 +693,7 @@ def _send_n(method, current_bc_idx, next_bc_idx, stack):
 
     layout = receiver.get_object_layout(current_universe)
     invokable = _lookup(layout, signature, method, current_bc_idx)
+    #invokable = layout.lookup_invokable(signature)
 
     if not we_are_jitted():
         if isinstance(invokable, BcMethod):
@@ -912,16 +916,6 @@ def _is_greater_two(stack, dummy=False):
 
 
 @jit.dont_look_inside
-def begin_slow_path(frame, stack):
-    return stack.top()
-
-
-@jit.dont_look_inside
-def end_slow_path(frame, stack):
-    return stack.top()
-
-
-@jit.dont_look_inside
 def emit_ptr_eq(rcvr, rcvr_type, dummy=False):
     from som.vm.current import current_universe
 
@@ -929,11 +923,6 @@ def emit_ptr_eq(rcvr, rcvr_type, dummy=False):
         if rcvr is None:  # rcvr is always None during shallow tracing
             return True
     return rcvr.get_class(current_universe) is rcvr_type
-
-
-@jit.dont_look_inside
-def emit_jump_to_label(frame, stack, label_id):
-    return stack.top()
 
 
 @jit.dont_look_inside
@@ -1193,7 +1182,7 @@ def interpret_tier1(
                     if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
                         invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
                         new_frame = _create_frame_1(invokable, frame, stack)
-                        new_stack = Stack(16)
+                        new_stack = Stack(8)
                         # turn this method invocation into direct call to compiled code
                         result = _interpret_CALL_ASSEMBLER(
                             frame=new_frame,
@@ -1233,7 +1222,7 @@ def interpret_tier1(
                     if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
                         invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
                         new_frame = _create_frame_2(invokable, frame, stack)
-                        new_stack = Stack(16)
+                        new_stack = Stack(8)
                         result = _interpret_CALL_ASSEMBLER(
                             frame=new_frame,
                             stack=new_stack,
@@ -1277,7 +1266,7 @@ def interpret_tier1(
                     if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
                         invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
                         new_frame = _create_frame_3(invokable, frame, stack)
-                        new_stack = Stack(16)
+                        new_stack = Stack(8)
                         result = _interpret_CALL_ASSEMBLER(
                             frame=new_frame,
                             stack=new_stack,
@@ -1302,44 +1291,45 @@ def interpret_tier1(
                 next_bc_idx = _send_3(method, current_bc_idx, next_bc_idx, stack)
 
         elif bytecode == Bytecodes.send_n:
-            if we_are_jitted():
-                rcvr_type = method.get_receiver_type(current_bc_idx)
-                if rcvr_type is None:
-                    next_bc_idx = _send_n(
-                        method,
-                        current_bc_idx,
-                        next_bc_idx,
-                        stack,
-                    )
-                else:
-                    signature = method.get_constant(current_bc_idx)
-                    rcvr = stack.take((signature.get_number_of_signature_arguments() - 1), dummy=True)
-                    if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
-                        invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
-                        new_frame = _create_frame(invokable, frame, stack)
-                        new_stack = Stack(16)
-                        result = _interpret_CALL_ASSEMBLER(
-                            frame=new_frame,
-                            stack=new_stack,
-                            current_bc_idx=0,
-                            entry_bc_idx=0,
-                            method=invokable,
-                            tstack=t_empty(),
-                            dummy=True,
-                        )
-                        stack.insert(0, result)
-                        # ---------------------------------------------------------------
-                        jit.begin_slow_path()
-                        next_bc_idx = _send_n(
-                            method,
-                            current_bc_idx,
-                            next_bc_idx,
-                            stack,
-                        )
-                        jit.end_slow_path()
-                        # ---------------------------------------------------------------
-            else:
-                next_bc_idx = _send_n(method, current_bc_idx, next_bc_idx, stack)
+            # if we_are_jitted():
+            #     rcvr_type = method.get_receiver_type(current_bc_idx)
+            #     if rcvr_type is None:
+            #         next_bc_idx = _send_n(
+            #             method,
+            #             current_bc_idx,
+            #             next_bc_idx,
+            #             stack,
+            #         )
+            #     else:
+            #         signature = method.get_constant(current_bc_idx)
+            #         rcvr = stack.take((signature.get_number_of_signature_arguments() - 1), dummy=True)
+            #         if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
+            #             invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
+            #             new_frame = _create_frame(invokable, frame, stack)
+            #             new_stack = Stack(8)
+            #             result = _interpret_CALL_ASSEMBLER(
+            #                 frame=new_frame,
+            #                 stack=new_stack,
+            #                 current_bc_idx=0,
+            #                 entry_bc_idx=0,
+            #                 method=invokable,
+            #                 tstack=t_empty(),
+            #                 dummy=True,
+            #             )
+            #             stack.insert(0, result)
+            #             # ---------------------------------------------------------------
+            #             jit.begin_slow_path()
+            #             next_bc_idx = _send_n(
+            #                 method,
+            #                 current_bc_idx,
+            #                 next_bc_idx,
+            #                 stack,
+            #             )
+            #             jit.end_slow_path()
+            #             # ---------------------------------------------------------------
+            # else:
+            #     next_bc_idx = _send_n(method, current_bc_idx, next_bc_idx, stack)
+            next_bc_idx = _send_n(method, current_bc_idx, next_bc_idx, stack)
 
         elif bytecode == Bytecodes.super_send:
             _do_super_send(stack, current_bc_idx, method)
