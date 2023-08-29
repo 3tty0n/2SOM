@@ -1,6 +1,7 @@
 from som.interp_type import is_ast_interpreter
 from som.vmobjects.abstract_object import AbstractObject
 
+from rlib.jit import dont_look_inside
 
 class _AbstractPrimitive(AbstractObject):
     _immutable_fields_ = ["_is_empty", "_signature", "_holder"]
@@ -70,6 +71,7 @@ class _BcPrimitive(_AbstractPrimitive):
         _AbstractPrimitive.__init__(self, signature_string, universe, is_empty)
         self._prim_fn = prim_fn
 
+    @dont_look_inside
     def invoke_n(self, stack, stack_ptr, ctx=None):
         prim_fn = self._prim_fn
         return prim_fn(self, stack, stack_ptr)
@@ -92,6 +94,7 @@ class UnaryPrimitive(_AbstractPrimitive):
         _AbstractPrimitive.__init__(self, signature_string, universe, is_empty)
         self._prim_fn = prim_fn
 
+    @dont_look_inside
     def invoke_1(self, rcvr, ctx=None):
         prim_fn = self._prim_fn
         return prim_fn(rcvr)
@@ -111,6 +114,7 @@ class BinaryPrimitive(_AbstractPrimitive):
         _AbstractPrimitive.__init__(self, signature_string, universe, is_empty)
         self._prim_fn = prim_fn
 
+    @dont_look_inside
     def invoke_2(self, rcvr, arg, ctx=None):
         prim_fn = self._prim_fn
         return prim_fn(rcvr, arg)
@@ -130,6 +134,7 @@ class TernaryPrimitive(_AbstractPrimitive):
         _AbstractPrimitive.__init__(self, signature_string, universe, is_empty)
         self._prim_fn = prim_fn
 
+    @dont_look_inside
     def invoke_3(self, rcvr, arg1, arg2, ctx=None):
         prim_fn = self._prim_fn
         return prim_fn(rcvr, arg1, arg2)

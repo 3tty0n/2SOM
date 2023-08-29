@@ -9,6 +9,7 @@ from som.vmobjects.primitive import (
     TernaryPrimitive,
 )
 
+from rlib.jit import dont_look_inside
 
 class BcBlock(AbstractObject):
 
@@ -67,13 +68,16 @@ def block_evaluation_primitive(num_args, universe):
     raise Exception("Unsupported number of arguments for block: " + str(num_args))
 
 
+@dont_look_inside
 def _invoke_1(rcvr):
     return rcvr.get_method().invoke_1(rcvr)
 
 
+@dont_look_inside
 def _invoke_2(rcvr, arg):
     return rcvr.get_method().invoke_2(rcvr, arg)
 
 
+@dont_look_inside
 def _invoke_3(rcvr, arg1, arg2):
     return rcvr.get_method().invoke_3(rcvr, arg1, arg2)

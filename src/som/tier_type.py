@@ -8,7 +8,8 @@ _interp_type_str = os.getenv("SOM_TIER", None)
 _TC = 1
 _BC = 2
 _HYBRID = 3
-_UNKNOWN = 4
+_STACK_UNROLLING = 4
+_UNKNOWN = 5
 
 
 def _get_tier_type():
@@ -18,6 +19,8 @@ def _get_tier_type():
         return _BC
     if _interp_type_str == "3":
         return _HYBRID
+    if _interp_type_str == "4":
+        return _STACK_UNROLLING
     return _UNKNOWN
 
 
@@ -37,6 +40,11 @@ def is_tier2():
 @jit.elidable
 def is_hybrid():
     return _INTERP_TYPE == _HYBRID
+
+
+@jit.elidable
+def is_stack_unrolling():
+    return _INTERP_TYPE == _STACK_UNROLLING
 
 
 class _TierManager(object):

@@ -45,6 +45,7 @@ from som.interpreter.bc.interpreter_tier2 import interpret_tier2
 from som.interpreter.control_flow import ReturnException
 from som.vmobjects.abstract_object import AbstractObject
 from som.vmobjects.method import AbstractMethod
+from rlib.jit import dont_look_inside
 
 
 class BcAbstractMethod(AbstractMethod):
@@ -273,6 +274,8 @@ def _interp_with_nlr_tier2(method, new_frame, max_stack_size):
 
 
 class BcMethod(BcAbstractMethod):
+
+    @dont_look_inside
     def invoke_1(self, rcvr, ctx=None):
         new_frame = create_frame_1(rcvr, self._size_frame, self._size_inner)
         return interpret(self, new_frame, self._maximum_number_of_stack_elements)
@@ -281,6 +284,7 @@ class BcMethod(BcAbstractMethod):
         new_frame = create_frame_1(rcvr, self._size_frame, self._size_inner)
         return interpret_tier2(self, new_frame, self._maximum_number_of_stack_elements)
 
+    @dont_look_inside
     def invoke_2(self, rcvr, arg1, ctx=None):
         new_frame = create_frame_2(
             rcvr,
@@ -301,6 +305,7 @@ class BcMethod(BcAbstractMethod):
         )
         return interpret_tier2(self, new_frame, self._maximum_number_of_stack_elements)
 
+    @dont_look_inside
     def invoke_3(self, rcvr, arg1, arg2, ctx=None):
         new_frame = create_frame_3(
             self._arg_inner_access,
@@ -323,6 +328,7 @@ class BcMethod(BcAbstractMethod):
         )
         return interpret_tier2(self, new_frame, self._maximum_number_of_stack_elements)
 
+    @dont_look_inside
     def invoke_4(self, rcvr, arg1, arg2, arg3, ctx=None):
         new_frame = create_frame_4(
             self._arg_inner_access,
@@ -347,6 +353,7 @@ class BcMethod(BcAbstractMethod):
         )
         return interpret_tier2(self, new_frame, self._maximum_number_of_stack_elements)
 
+    @dont_look_inside
     def invoke_n(self, stack, stack_ptr, ctx=None):
         new_frame = create_frame(
             self._arg_inner_access,
@@ -750,6 +757,8 @@ class _BackJumpPatch(HeapEntry):
 
 
 class BcMethodNLR(BcMethod):
+
+    @dont_look_inside
     def invoke_1(self, rcvr, ctx=None):
         new_frame = create_frame_1(rcvr, self._size_frame, self._size_inner)
         return _interp_with_nlr(self, new_frame, self._maximum_number_of_stack_elements)
@@ -758,6 +767,7 @@ class BcMethodNLR(BcMethod):
         new_frame = create_frame_1(rcvr, self._size_frame, self._size_inner)
         return _interp_with_nlr_tier2(self, new_frame, self._maximum_number_of_stack_elements)
 
+    @dont_look_inside
     def invoke_2(self, rcvr, arg1, ctx=None):
         new_frame = create_frame_2(
             rcvr,
@@ -778,6 +788,7 @@ class BcMethodNLR(BcMethod):
         )
         return _interp_with_nlr_tier2(self, new_frame, self._maximum_number_of_stack_elements)
 
+    @dont_look_inside
     def invoke_3(self, rcvr, arg1, arg2, ctx=None):
         new_frame = create_frame_3(
             self._arg_inner_access,
@@ -800,6 +811,7 @@ class BcMethodNLR(BcMethod):
         )
         return _interp_with_nlr_tier2(self, new_frame, self._maximum_number_of_stack_elements)
 
+    @dont_look_inside
     def invoke_n(self, stack, stack_ptr, ctx=None):
         new_frame = create_frame(
             self._arg_inner_access,

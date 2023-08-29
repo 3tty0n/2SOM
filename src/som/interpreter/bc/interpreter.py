@@ -19,7 +19,7 @@ from som.interpreter.bc.tier_shifting import ContinueInTier1, ContinueInTier2
 from som.interpreter.bc.traverse_stack import t_empty, t_dump, t_push
 from som.interpreter.control_flow import ReturnException
 from som.interpreter.send import lookup_and_send_2, lookup_and_send_3, lookup_and_send_2_tier2, lookup_and_send_3_tier2
-from som.tier_type import is_hybrid, is_tier1, is_tier2, tier_manager
+from som.tier_type import is_hybrid, is_tier1, is_tier2, is_stack_unrolling, tier_manager
 from som.vm.globals import nilObject, trueObject, falseObject
 from som.vmobjects.array import Array
 from som.vmobjects.block_bc import BcBlock
@@ -48,6 +48,7 @@ def interpret(method, frame, max_stack_size, dummy=False):
     """
     from som.interpreter.bc.interpreter_tier1 import interpret_tier1
     from som.interpreter.bc.interpreter_tier2 import interpret_tier2
+    from som.interpreter.bc.interpreter_unroll_stack import interpret_unroll_stack
 
     if dummy:
         return
@@ -56,8 +57,11 @@ def interpret(method, frame, max_stack_size, dummy=False):
         w_result = interpret_tier1(method, frame, max_stack_size)
         return w_result
     elif is_tier2():
-        result = interpret_tier2(method, frame, max_stack_size)
-        return result
+        w_result = interpret_tier2(method, frame, max_stack_size)
+        return w_result
+    elif is_stack_unrolling():
+        w_result = interpret_unroll_stack(method, frame, max_stack_size)
+        return w_result
     elif is_hybrid():
         current_bc_idx = 0
         while True:
