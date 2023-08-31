@@ -80,6 +80,9 @@ class LiteralReturn(AbstractTrivialMethod):
         def inline(self, mgenc):
             emit_push_constant(mgenc, self._value)
 
+        def get_number_of_bytecodes(self):
+            return 0
+
 
 class GlobalRead(AbstractTrivialMethod):
     _immutable_fields_ = ["_assoc?", "_global_name", "_context_level", "universe"]
@@ -180,6 +183,9 @@ class FieldRead(AbstractTrivialMethod):
         def inline(self, mgenc):
             emit_push_field_with_index(mgenc, self._field_idx, self._context_level - 1)
 
+        def get_number_of_bytecodes(self):
+            return 0
+
 
 class FieldWrite(AbstractTrivialMethod):
     _immutable_fields_ = ["_field_idx", "_arg_idx"]
@@ -214,3 +220,6 @@ class FieldWrite(AbstractTrivialMethod):
             num_args,
             rcvr,
         )
+
+    def get_number_of_bytecodes(self):
+        return 0
