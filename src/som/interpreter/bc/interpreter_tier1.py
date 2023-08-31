@@ -9,7 +9,7 @@ from som.interpreter.ast.frame import (
     create_frame_2,
     mark_as_no_longer_on_stack,
 )
-from som.interpreter.bc.frame import create_frame_3, create_frame
+from som.interpreter.bc.frame import create_frame_3, create_frame, stack_pop_old_arguments_and_push_result_dli
 from som.interpreter.bc.bytecodes import bytecode_length, Bytecodes, bytecode_as_str
 from som.interpreter.bc.frame import (
     get_block_at,
@@ -1102,14 +1102,16 @@ def interpret_tier1(
             #     rcvr_type = method.get_receiver_type(current_bc_idx)
             #     if rcvr_type is None:
             #         next_bc_idx = _send_n(
-            #             method,
             #             current_bc_idx,
             #             next_bc_idx,
+            #             method,
+            #             frame,
             #             stack,
             #         )
             #     else:
             #         signature = method.get_constant(current_bc_idx)
-            #         rcvr = stack.take((signature.get_number_of_signature_arguments() - 1), dummy=True)
+            #         signature_num_args = signature.get_number_of_signature_arguments()
+            #         rcvr = stack.take(signature_num_args - 1, dummy=True)
             #         if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
             #             invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
             #             new_frame = _create_frame(invokable, frame, stack)
@@ -1123,19 +1125,29 @@ def interpret_tier1(
             #                 tstack=t_empty(),
             #                 dummy=True,
             #             )
-            #             stack.insert(0, result)
+            #             num_args = invokable.get_number_of_arguments()
+            #             stack = stack_pop_old_arguments_and_push_result_dli(
+            #                 stack, num_args, result, dummy=True)
             #             # ---------------------------------------------------------------
             #             jit.begin_slow_path()
             #             next_bc_idx = _send_n(
-            #                 method,
             #                 current_bc_idx,
             #                 next_bc_idx,
+            #                 method,
+            #                 frame,
             #                 stack,
             #             )
             #             jit.end_slow_path()
             #             # ---------------------------------------------------------------
             # else:
-            #     next_bc_idx = _send_n(method, current_bc_idx, next_bc_idx, stack)
+            #     next_bc_idx = _send_n(
+            #         current_bc_idx,
+            #         next_bc_idx,
+            #         method,
+            #         frame,
+            #         stack,
+            #     )
+
             next_bc_idx = _send_n(current_bc_idx, next_bc_idx,  method, frame, stack)
 
         elif bytecode == Bytecodes.super_send:

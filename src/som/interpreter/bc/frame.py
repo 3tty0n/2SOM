@@ -159,6 +159,16 @@ def stack_pop_old_arguments_and_push_result(stack, stack_ptr, num_args, result):
     return stack_ptr
 
 
+@jit.dont_look_inside
+def stack_pop_old_arguments_and_push_result_dli(stack, num_args, result, dummy=False):
+    if dummy:
+        return stack
+    for _ in range(num_args):
+        stack.pop()
+    stack.push(result)
+    return stack
+
+
 @jit.unroll_safe
 def get_block_at(frame, ctx_level):
     assert ctx_level > 0
