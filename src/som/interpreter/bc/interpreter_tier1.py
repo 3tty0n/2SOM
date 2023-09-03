@@ -971,7 +971,7 @@ def interpret_tier1(
                     if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
                         invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
                         new_frame = _create_frame_1(invokable, frame, stack)
-                        new_stack = Stack(8)
+                        new_stack = Stack(16)
                         # turn this method invocation into direct call to compiled code
                         result = _interpret_CALL_ASSEMBLER(
                             frame=new_frame,
@@ -1019,7 +1019,7 @@ def interpret_tier1(
                     if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
                         invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
                         new_frame = _create_frame_2(invokable, frame, stack)
-                        new_stack = Stack(8)
+                        new_stack = Stack(16)
                         result = _interpret_CALL_ASSEMBLER(
                             frame=new_frame,
                             stack=new_stack,
@@ -1066,7 +1066,7 @@ def interpret_tier1(
                     if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
                         invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
                         new_frame = _create_frame_3(invokable, frame, stack)
-                        new_stack = Stack(8)
+                        new_stack = Stack(16)
                         result = _interpret_CALL_ASSEMBLER(
                             frame=new_frame,
                             stack=new_stack,
