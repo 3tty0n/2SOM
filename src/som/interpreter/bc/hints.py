@@ -58,3 +58,34 @@ def enable_shallow_tracing_argn(argn):
         return call_handler
 
     return enable_shallow_tracing
+
+
+def enable_shallow_tracing_with_value(value):
+    def enable_shallow_tracing(func):
+        """
+        A decorator to enable an actual handler to do shallow tracing.
+        Use this decorator for a function that returns a value, which is
+        at `argn' of args.
+        """
+        always_inline(func)  # tell RPython to inline
+
+        @dont_look_inside
+        def shallow_hanlder(*args):
+            dummy = args[-1]
+            args = args[:-2]
+            if dummy:
+                return value
+            return func(*args)
+
+        shallow_hanlder.func_name = "handler_" + func.func_name
+
+        @always_inline
+        def call_handler(*args):
+            if we_are_jitted():
+                return shallow_hanlder(*args + (func, True,))
+            else:
+                return shallow_hanlder(*args + (None, False,))
+
+        return call_handler
+
+    return enable_shallow_tracing
