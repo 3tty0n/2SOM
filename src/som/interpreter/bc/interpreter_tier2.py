@@ -35,6 +35,20 @@ from rlib.jit import (
     dont_look_inside
 )
 
+def _do_return_non_local(result, frame, ctx_level):
+    # Compute the context for the non-local return
+    block = get_block_at(frame, ctx_level)
+
+    # Make sure the block context is still on the stack
+    if not block.is_outer_on_stack():
+        # Try to recover by sending 'escapedBlock:' to the self object.
+        # That is the most outer self object, not the blockSelf.
+        self_block = read_frame(frame, FRAME_AND_INNER_RCVR_IDX)
+        outer_self = get_self_dynamically(frame)
+        return lookup_and_send_2(outer_self, self_block, "escapedBlock:")
+
+    raise ReturnException(result, block.get_on_stack_marker())
+
 def _invoke_invokable_slow_path_tier2(invokable, num_args, receiver, stack, stack_ptr):
     if num_args == 1:
         stack[stack_ptr] = invokable.invoke_1(receiver)
