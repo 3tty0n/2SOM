@@ -47,7 +47,7 @@ class Stack(object):
         assert self.stack_ptr < len(self.items)
         self.items[self.stack_ptr] = w_x
 
-    @jit.dont_look_inside
+    @dont_look_inside
     def pop(self, dummy=False):
         if dummy:
             return self.items[self.stack_ptr]
@@ -57,20 +57,22 @@ class Stack(object):
         self.stack_ptr -= 1
         return w_x
 
-    @jit.dont_look_inside
+    @dont_look_inside
     def top(self, dummy=False):
         if dummy:
             return self.items[self.stack_ptr]
         return self.items[self.stack_ptr]
 
-    @jit.dont_look_inside
+    @dont_look_inside
     def take(self, n, dummy=False):
         if dummy:
             return self.items[self.stack_ptr]
         return self.items[self.stack_ptr - n]
 
-    @enable_shallow_tracing
-    def insert(self, n, w_x):
+    @dont_look_inside
+    def insert(self, n, w_x, dummy=False):
+        if dummy:
+            return
         assert n <= self.stack_ptr
         self.items[self.stack_ptr - n] = w_x
 
@@ -972,7 +974,7 @@ def interpret_tier1(
                             tstack=t_empty(),
                             dummy=True,
                         )
-                        stack.insert(0, result)
+                        stack.insert(0, result, dummy=True)
                         # This path is a slow path, going this way when the rcvr type is
                         # different from when it is compiled
                         jit.begin_slow_path()
@@ -1019,7 +1021,7 @@ def interpret_tier1(
                             tstack=t_empty(),
                             dummy=True,
                         )
-                        stack.insert(0, result)
+                        stack.insert(0, result, dummy=True)
                         # ---------------------------------------------------------------
                         jit.begin_slow_path()
                         next_bc_idx = _send_2(
@@ -1066,7 +1068,7 @@ def interpret_tier1(
                             tstack=t_empty(),
                             dummy=True,
                         )
-                        stack.insert(0, result)
+                        stack.insert(0, result, dummy=True)
                         # ---------------------------------------------------------------
                         jit.begin_slow_path()
                         next_bc_idx = _send_3(
