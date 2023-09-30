@@ -248,6 +248,7 @@ _BYTECODE_LENGTH = [
     2,  # send_1
     2,  # send_2
     2,  # send_3
+    2,  # send_4
     2,  # send_n
     2,  # super_send
     1,  # return_local

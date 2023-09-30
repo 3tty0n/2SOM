@@ -9,7 +9,7 @@ from som.interpreter.ast.frame import (
     create_frame_2,
     mark_as_no_longer_on_stack,
 )
-from som.interpreter.bc.frame import create_frame_3, create_frame, stack_pop_old_arguments_and_push_result_dli
+from som.interpreter.bc.frame import create_frame_3, create_frame_4, create_frame
 from som.interpreter.bc.bytecodes import bytecode_length, Bytecodes, bytecode_as_str
 from som.interpreter.bc.frame import (
     get_block_at,
@@ -124,6 +124,11 @@ def _push_frame_2(current_bc_idx, next_bc_idx,  method, frame, stack):
 
 
 @enable_shallow_tracing
+def _push_frame_3(current_bc_idx, next_bc_idx,  method, frame, stack):
+    stack.push(read_frame(frame, FRAME_AND_INNER_RCVR_IDX + 3))
+
+
+@enable_shallow_tracing
 def _push_inner(current_bc_idx, next_bc_idx,  method, frame, stack):
     idx = method.get_bytecode(current_bc_idx + 1)
     ctx_level = method.get_bytecode(current_bc_idx + 2)
@@ -149,6 +154,9 @@ def _push_inner_1(current_bc_idx, next_bc_idx,  method, frame, stack):
 def _push_inner_2(current_bc_idx, next_bc_idx,  method, frame, stack):
     stack.push(read_inner(frame, FRAME_AND_INNER_RCVR_IDX + 2))
 
+@enable_shallow_tracing
+def _push_inner_3(current_bc_idx, next_bc_idx,  method, frame, stack):
+    stack.push(read_inner(frame, FRAME_AND_INNER_RCVR_IDX + 3))
 
 @enable_shallow_tracing
 def _push_field(current_bc_idx, next_bc_idx,  method, frame, stack):
@@ -260,6 +268,12 @@ def _pop_frame_1(current_bc_idx, next_bc_idx,  method, frame, stack):
 def _pop_frame_2(current_bc_idx, next_bc_idx,  method, frame, stack):
     value = stack.pop()
     write_frame(frame, FRAME_AND_INNER_RCVR_IDX + 2, value)
+
+
+@enable_shallow_tracing
+def _pop_frame_3(current_bc_idx, next_bc_idx,  method, frame, stack):
+    value = stack.pop()
+    write_frame(frame, FRAME_AND_INNER_RCVR_IDX + 3, value)
 
 
 @enable_shallow_tracing
@@ -867,6 +881,9 @@ def interpret_tier1(
         elif bytecode == Bytecodes.push_frame_2:
             _push_frame_2(current_bc_idx, next_bc_idx, method, frame, stack)
 
+        elif bytecode == Bytecodes.push_frame_3:
+            _push_frame_3(current_bc_idx, next_bc_idx, method, frame, stack)
+
         elif bytecode == Bytecodes.push_inner:
             _push_inner(current_bc_idx, next_bc_idx, method, frame, stack)
 
@@ -878,6 +895,9 @@ def interpret_tier1(
 
         elif bytecode == Bytecodes.push_inner_2:
             _push_inner_2(current_bc_idx, next_bc_idx, method, frame, stack)
+
+        elif bytecode == Bytecodes.push_inner_3:
+            _push_inner_3(current_bc_idx, next_bc_idx, method, frame, stack)
 
         elif bytecode == Bytecodes.push_field:
             _push_field(current_bc_idx, next_bc_idx, method, frame, stack)
@@ -933,6 +953,9 @@ def interpret_tier1(
         elif bytecode == Bytecodes.pop_frame_2:
             _pop_frame_2(current_bc_idx, next_bc_idx, method, frame, stack)
 
+        elif bytecode == Bytecodes.pop_frame_3:
+            _pop_frame_3(current_bc_idx, next_bc_idx, method, frame, stack)
+
         elif bytecode == Bytecodes.pop_inner:
             _pop_inner(current_bc_idx, next_bc_idx, method, frame, stack)
 
@@ -944,6 +967,9 @@ def interpret_tier1(
 
         elif bytecode == Bytecodes.pop_inner_2:
             _pop_inner_2(current_bc_idx, next_bc_idx, method, frame, stack)
+
+        elif bytecode == Bytecodes.pop_inner_3:
+            _pop_inner_3(current_bc_idx, next_bc_idx, method, frame, stack)
 
         elif bytecode == Bytecodes.nil_frame:
             _nil_frame(current_bc_idx, next_bc_idx, method, frame, stack)

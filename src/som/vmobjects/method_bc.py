@@ -38,6 +38,7 @@ from som.interpreter.bc.frame import (
     create_frame,
     stack_pop_old_arguments_and_push_result,
     create_frame_3,
+    create_frame_4
 )
 from som.interpreter.bc.interpreter import interpret
 from som.interpreter.bc.interpreter_tier2 import interpret_tier2
