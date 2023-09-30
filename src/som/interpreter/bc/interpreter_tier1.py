@@ -413,7 +413,6 @@ def _send_1(current_bc_idx, next_bc_idx,  method, frame, stack):
 
     layout = receiver.get_object_layout(current_universe)
     invokable = _lookup(layout, signature, method, current_bc_idx)
-    #invokable = layout.lookup_invokable(signature)
 
     if not we_are_jitted():
         if isinstance(invokable, BcMethod):
@@ -446,14 +445,11 @@ def _send_2(current_bc_idx, next_bc_idx,  method, frame, stack):
     from som.vm.current import current_universe
     from som.statistics import statistics
 
-    # print current_bc_idx, next_bc_idx; stack.dump()
-
     signature = method.get_constant(current_bc_idx)
     receiver = stack.take(1)
 
     layout = receiver.get_object_layout(current_universe)
     invokable = _lookup(layout, signature, method, current_bc_idx)
-    #invokable = layout.lookup_invokable(signature)
 
     if not we_are_jitted():
         if isinstance(invokable, BcMethod):
@@ -487,7 +483,6 @@ def _send_3(current_bc_idx, next_bc_idx,  method, frame, stack):
     receiver = stack.take(2)
     layout = receiver.get_object_layout(current_universe)
     invokable = _lookup(layout, signature, method, current_bc_idx)
-    #invokable = layout.lookup_invokable(signature)
 
     if not we_are_jitted():
         if isinstance(invokable, BcMethod):
@@ -525,7 +520,6 @@ def _send_n(current_bc_idx, next_bc_idx, method, frame, stack):
 
     layout = receiver.get_object_layout(current_universe)
     invokable = _lookup(layout, signature, method, current_bc_idx)
-    #invokable = layout.lookup_invokable(signature)
 
     if not we_are_jitted():
         if isinstance(invokable, BcMethod):
