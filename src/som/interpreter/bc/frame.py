@@ -113,6 +113,52 @@ def create_frame_3(
 
 
 @jit.unroll_safe
+def create_frame_4(
+    arg_inner_access_reversed,
+    size_frame,
+    size_inner,
+    receiver,
+    arg1,
+    arg2,
+    arg3
+):
+    frame = [_erase_obj(nilObject)] * size_frame
+    make_sure_not_resized(frame)
+
+    if size_inner > 0:
+        inner = [nilObject] * size_inner
+        make_sure_not_resized(inner)
+        frame[FRAME_AND_INNER_RCVR_IDX] = _erase_obj(receiver)
+        frame[_FRAME_INNER_IDX] = _erase_list(inner)
+
+        inner[_INNER_ON_STACK_IDX] = trueObject
+        inner[FRAME_AND_INNER_RCVR_IDX] = receiver
+
+        args = [arg3, arg2, arg1]
+        frame_i = FRAME_AND_INNER_RCVR_IDX + 1
+        inner_i = _FRAME_AND_INNER_FIRST_ARG
+        argi = 3
+
+        while arg_i >= 0:
+            arg_val = args[arg_i]
+            if arg_inner_access_reversed[arg_i]:
+                inner[inner_i] = arg_val
+                inner_i += 1
+            else:
+                frame[frame_i] = _erase_obj(arg_val)
+                frame_i += 1
+            arg_i -= 1
+    else:
+        frame[0] = _erase_list(None)
+        frame[FRAME_AND_INNER_RCVR_IDX] = _erase_obj(receiver)
+        frame[FRAME_AND_INNER_RCVR_IDX + 1] = _erase_obj(arg1)
+        frame[FRAME_AND_INNER_RCVR_IDX + 2] = _erase_obj(arg2)
+        frame[FRAME_AND_INNER_RCVR_IDX + 3] = _erase_obj(arg3)
+
+    return frame
+
+
+@jit.unroll_safe
 def _set_arguments_without_inner(
     frame, prev_stack, prev_stack_ptr, num_args_without_rcvr
 ):
@@ -157,16 +203,6 @@ def stack_pop_old_arguments_and_push_result(stack, stack_ptr, num_args, result):
     stack_ptr += 1
     stack[stack_ptr] = result
     return stack_ptr
-
-
-@jit.dont_look_inside
-def stack_pop_old_arguments_and_push_result_dli(stack, num_args, result, dummy=False):
-    if dummy:
-        return stack
-    for _ in range(num_args):
-        stack.pop()
-    stack.push(result)
-    return stack
 
 
 @jit.unroll_safe

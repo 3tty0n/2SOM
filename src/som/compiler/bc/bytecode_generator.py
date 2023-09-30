@@ -132,6 +132,8 @@ def emit_send(mgenc, msg):
         emit2(mgenc, BC.send_2, idx)
     elif num_args == 3:
         emit2(mgenc, BC.send_3, idx)
+    elif num_args == 4:
+        emit2(mgenc, BC.send_4, idx)
     else:
         emit2(mgenc, BC.send_n, idx)
 

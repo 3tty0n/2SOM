@@ -508,6 +508,42 @@ def _send_3(current_bc_idx, next_bc_idx,  method, frame, stack):
 
 
 @enable_shallow_tracing_argn(1)
+def _send_4(current_bc_idx, next_bc_idx,  method, frame, stack):
+    from som.vmobjects.method_bc import BcMethod
+    from som.vm.current import current_universe
+    from som.statistics import statistics
+
+    signature = method.get_constant(current_bc_idx)
+    receiver = stack.take(3)
+    layout = receiver.get_object_layout(current_universe)
+    invokable = _lookup(layout, signature, method, current_bc_idx)
+    #invokable = layout.lookup_invokable(signature)
+
+    if not we_are_jitted():
+        if isinstance(invokable, BcMethod):
+            rcvr_type = receiver.get_class(current_universe)
+            method.set_receiver_type(current_bc_idx, rcvr_type)
+
+    if not we_are_translated():
+        statistics.incr(invokable)
+
+    if invokable is not None:
+        arg3 = stack.pop()
+        arg2 = stack.pop()
+        arg1 = stack.pop()
+        stack.insert(0, invokable.invoke_4(receiver, arg1, arg2, arg3))
+    elif not layout.is_latest:
+        _update_object_and_invalidate_old_caches(
+            receiver, method, current_bc_idx, current_universe
+        )
+        next_bc_idx = current_bc_idx
+    else:
+        _send_does_not_understand(receiver, signature, stack)
+
+    return next_bc_idx
+
+
+@enable_shallow_tracing_argn(1)
 def _send_n(current_bc_idx, next_bc_idx, method, frame, stack):
     from som.vmobjects.method_bc import BcMethod
     from som.vm.current import current_universe
@@ -1076,6 +1112,53 @@ def interpret_tier1(
                         # ---------------------------------------------------------------
             else:
                 next_bc_idx = _send_3(
+                    current_bc_idx,
+                    next_bc_idx,
+                    method,
+                    frame,
+                    stack
+                )
+
+        elif bytecode == Bytecodes.send_4:
+            if we_are_jitted():
+                rcvr_type = method.get_receiver_type(current_bc_idx)
+                if rcvr_type is None:
+                    next_bc_idx = _send_3(
+                        current_bc_idx,
+                        next_bc_idx,
+                        method,
+                        frame,
+                        stack
+                    )
+                else:
+                    rcvr = stack.take(3, dummy=True)
+                    if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
+                        invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
+                        new_frame = _create_frame_3(invokable, frame, stack)
+                        new_stack = Stack(16)
+                        result = _interpret_CALL_ASSEMBLER(
+                            frame=new_frame,
+                            stack=new_stack,
+                            current_bc_idx=0,
+                            entry_bc_idx=0,
+                            method=invokable,
+                            tstack=t_empty(),
+                            dummy=True,
+                        )
+                        stack.insert(0, result, dummy=True)
+                        # ---------------------------------------------------------------
+                        jit.begin_slow_path()
+                        next_bc_idx = _send_3(
+                            current_bc_idx,
+                            next_bc_idx,
+                            method,
+                            frame,
+                            stack
+                        )
+                        jit.end_slow_path()
+                        # ---------------------------------------------------------------
+            else:
+                next_bc_idx = _send_4(
                     current_bc_idx,
                     next_bc_idx,
                     method,

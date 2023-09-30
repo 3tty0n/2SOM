@@ -12,13 +12,15 @@ class Bytecodes(object):
     push_frame_0 = push_frame + 1
     push_frame_1 = push_frame_0 + 1
     push_frame_2 = push_frame_1 + 1
+    push_frame_3 = push_frame_2 + 1
 
-    push_inner = push_frame_2 + 1
+    push_inner = push_frame_3 + 1
     push_inner_0 = push_inner + 1
     push_inner_1 = push_inner_0 + 1
     push_inner_2 = push_inner_1 + 1
+    push_inner_3 = push_inner_2 + 1
 
-    push_field = push_inner_2 + 1
+    push_field = push_inner_3 + 1
     push_field_0 = push_field + 1
     push_field_1 = push_field_0 + 1
 
@@ -42,13 +44,15 @@ class Bytecodes(object):
     pop_frame_0 = pop_frame + 1
     pop_frame_1 = pop_frame_0 + 1
     pop_frame_2 = pop_frame_1 + 1
+    pop_frame_3 = pop_frame_2 + 1
 
-    pop_inner = pop_frame_2 + 1
+    pop_inner = pop_frame_3 + 1
     pop_inner_0 = pop_inner + 1
     pop_inner_1 = pop_inner_0 + 1
     pop_inner_2 = pop_inner_1 + 1
+    pop_inner_3 = pop_inner_2 + 1
 
-    pop_field = pop_inner_2 + 1
+    pop_field = pop_inner_3 + 1
     pop_field_0 = pop_field + 1
     pop_field_1 = pop_field_0 + 1
 
@@ -58,7 +62,8 @@ class Bytecodes(object):
     send_1 = nil_inner + 1
     send_2 = send_1 + 1
     send_3 = send_2 + 1
-    send_n = send_3 + 1
+    send_4 = send_3 + 1
+    send_n = send_4 + 1
 
     super_send = send_n + 1
 
@@ -87,7 +92,8 @@ class Bytecodes(object):
     q_super_send_1 = jump2_backward + 1
     q_super_send_2 = q_super_send_1 + 1
     q_super_send_3 = q_super_send_2 + 1
-    q_super_send_n = q_super_send_3 + 1
+    q_super_send_4 = q_super_send_3 + 1
+    q_super_send_n = q_super_send_4 + 1
 
     push_local = q_super_send_n + 1
     push_argument = push_local + 1
@@ -164,21 +170,26 @@ RUN_TIME_ONLY_BYTECODES = [
     Bytecodes.push_frame_0,
     Bytecodes.push_frame_1,
     Bytecodes.push_frame_2,
+    Bytecodes.push_frame_3,
     Bytecodes.push_inner,
     Bytecodes.push_inner_1,
     Bytecodes.push_inner_2,
+    Bytecodes.push_inner_3,
     Bytecodes.pop_frame,
     Bytecodes.pop_frame_1,
     Bytecodes.pop_frame_2,
+    Bytecodes.pop_frame_3,
     Bytecodes.pop_inner,
     Bytecodes.pop_inner_0,
     Bytecodes.pop_inner_1,
     Bytecodes.pop_inner_2,
+    Bytecodes.pop_inner_3,
     Bytecodes.nil_frame,
     Bytecodes.nil_inner,
     Bytecodes.q_super_send_1,
     Bytecodes.q_super_send_2,
     Bytecodes.q_super_send_3,
+    Bytecodes.q_super_send_4,
     Bytecodes.q_super_send_n,
 ]
 
@@ -199,10 +210,12 @@ _BYTECODE_LENGTH = [
     3,  # push_frame_0
     3,  # push_frame_1
     3,  # push_frame_2
+    3,  # push_frame_3
     3,  # push_inner
     3,  # push_inner_0
     3,  # push_inner_1
     3,  # push_inner_2
+    3,  # push_inner_3
     3,  # push_field
     1,  # push_field_0
     1,  # push_field_1
@@ -221,10 +234,12 @@ _BYTECODE_LENGTH = [
     3,  # pop_frame_0
     3,  # pop_frame_1
     3,  # pop_frame_2
+    3,  # pop_frame_3
     3,  # pop_inner
     3,  # pop_inner_0
     3,  # pop_inner_1
     3,  # pop_inner_2
+    3,  # pop_inner_3
     3,  # pop_field
     1,  # pop_field_0
     1,  # pop_field_1
@@ -257,6 +272,7 @@ _BYTECODE_LENGTH = [
     2,  # q_super_send_1
     2,  # q_super_send_2
     2,  # q_super_send_3
+    2,  # q_super_send_4
     2,  # q_super_send_n
     # rewritten on first use
     3,  # push_local
@@ -277,10 +293,12 @@ _BYTECODE_STACK_EFFECT = [
     1,  # push_frame_0
     1,  # push_frame_1
     1,  # push_frame_2
+    1,  # push_frame_3
     1,  # push_inner
     1,  # push_inner_0
     1,  # push_inner_1
     1,  # push_inner_2
+    1,  # push_inner_3
     1,  # push_field
     1,  # push_field_0
     1,  # push_field_1
@@ -299,10 +317,12 @@ _BYTECODE_STACK_EFFECT = [
     -1,  # pop_frame_0
     -1,  # pop_frame_1
     -1,  # pop_frame_2
+    -1,  # pop_frame_3
     -1,  # pop_inner
     -1,  # pop_inner_0
     -1,  # pop_inner_1
     -1,  # pop_inner_2
+    -1,  # pop_inner_3
     -1,  # pop_field
     -1,  # pop_field_0
     -1,  # pop_field_1
@@ -311,6 +331,7 @@ _BYTECODE_STACK_EFFECT = [
     _STACK_EFFECT_DEPENDS_ON_MESSAGE,  # send_1
     _STACK_EFFECT_DEPENDS_ON_MESSAGE,  # send_2
     _STACK_EFFECT_DEPENDS_ON_MESSAGE,  # send_3
+    _STACK_EFFECT_DEPENDS_ON_MESSAGE,  # send_4
     _STACK_EFFECT_DEPENDS_ON_MESSAGE,  # send_n
     _STACK_EFFECT_DEPENDS_ON_MESSAGE,  # super_send
     0,  # return_local
@@ -335,6 +356,7 @@ _BYTECODE_STACK_EFFECT = [
     _STACK_EFFECT_DEPENDS_ON_MESSAGE,  # q_super_send_1
     _STACK_EFFECT_DEPENDS_ON_MESSAGE,  # q_super_send_2
     _STACK_EFFECT_DEPENDS_ON_MESSAGE,  # q_super_send_3
+    _STACK_EFFECT_DEPENDS_ON_MESSAGE,  # q_super_send_4
     _STACK_EFFECT_DEPENDS_ON_MESSAGE,  # q_super_send_n
     1,  # push_argument
     1,  # push_field

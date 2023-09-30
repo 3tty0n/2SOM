@@ -157,6 +157,7 @@ def dump_bytecode(m, b, indent=""):
         Bytecodes.send_1,
         Bytecodes.send_2,
         Bytecodes.send_3,
+        Bytecodes.send_4,
         Bytecodes.send_n,
         Bytecodes.super_send,
         Bytecodes.q_super_send_1,

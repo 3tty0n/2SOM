@@ -642,6 +642,18 @@ def interpret_tier2(
             stack_ptr -= 2
             stack[stack_ptr] = invokable.invoke_3(stack[stack_ptr], arg1, arg2)
 
+        elif bytecode == Bytecodes.q_super_send_4:
+            invokable = method.get_inline_cache_invokable(current_bc_idx)
+            arg3 = stack[stack_ptr]
+            arg2 = stack[stack_ptr - 1]
+            arg2 = stack[stack_ptr - 2]
+            if we_are_jitted():
+                stack[stack_ptr] = None
+                stack[stack_ptr - 1] = None
+                stack[stack_ptr - 2] = None
+            stack_ptr -= 3
+            stack[stack_ptr] = invokable.invoke_4(stack[stack_ptr], arg1, arg2)
+
         elif bytecode == Bytecodes.q_super_send_n:
             invokable = method.get_inline_cache_invokable(current_bc_idx)
             stack_ptr = invokable.invoke_n(stack, stack_ptr)
@@ -691,6 +703,8 @@ def _do_super_send_tier2(bytecode_index, method, stack, stack_ptr):
             bc = Bytecodes.q_super_send_2
         elif num_args == 3:
             bc = Bytecodes.q_super_send_3
+        elif num_args == 4:
+            bc = Bytecodes.q_super_send_4
         else:
             bc = Bytecodes.q_super_send_n
         method.set_bytecode(bytecode_index, bc)
