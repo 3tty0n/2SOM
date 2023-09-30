@@ -16,7 +16,7 @@ from som.interpreter.bc.frame import (
     get_self_dynamically,
 )
 from som.interpreter.bc.traverse_stack import t_empty, t_dump, t_push
-from som.interpreter.bc.hints import enable_shallow_tracing, enable_shallow_tracing_argn
+from som.interpreter.bc.hints import enable_shallow_tracing, enable_shallow_tracing_argn, enable_shallow_tracing_with_value
 from som.interpreter.bc.tier_shifting import TRACE_THRESHOLD, ContinueInTier1, ContinueInTier2
 from som.interpreter.control_flow import ReturnException
 from som.interpreter.send import lookup_and_send_2, lookup_and_send_3, lookup_and_send_2_tier2, lookup_and_send_3_tier2
@@ -47,7 +47,7 @@ class Stack(object):
         assert self.stack_ptr < len(self.items)
         self.items[self.stack_ptr] = w_x
 
-    @jit.dont_look_inside
+    @dont_look_inside
     def pop(self, dummy=False):
         if dummy:
             return self.items[self.stack_ptr]
@@ -57,20 +57,22 @@ class Stack(object):
         self.stack_ptr -= 1
         return w_x
 
-    @jit.dont_look_inside
+    @dont_look_inside
     def top(self, dummy=False):
         if dummy:
             return self.items[self.stack_ptr]
         return self.items[self.stack_ptr]
 
-    @jit.dont_look_inside
+    @dont_look_inside
     def take(self, n, dummy=False):
         if dummy:
             return self.items[self.stack_ptr]
         return self.items[self.stack_ptr - n]
 
-    @enable_shallow_tracing
-    def insert(self, n, w_x):
+    @dont_look_inside
+    def insert(self, n, w_x, dummy=False):
+        if dummy:
+            return
         assert n <= self.stack_ptr
         self.items[self.stack_ptr - n] = w_x
 
@@ -665,40 +667,30 @@ def _pop_argument(current_bc_idx, next_bc_idx,  method, frame, stack):
     return next_bc_idx
 
 
-@jit.dont_look_inside
-def _return_local(current_bc_idx, next_bc_idx,  method, frame, stack, dummy=False):
-    if dummy:
-        return stack.top()
+@enable_shallow_tracing_with_value(nilObject)
+def _return_local(current_bc_idx, next_bc_idx,  method, frame, stack):
     return stack.top()
 
 
-@jit.dont_look_inside
-def _return_self(current_bc_idx, next_bc_idx,  method, frame, stack, dummy=False):
-    if dummy:
-        return nilObject
+@enable_shallow_tracing_with_value(nilObject)
+def _return_self(current_bc_idx, next_bc_idx,  method, frame, stack):
     return read_frame(frame, FRAME_AND_INNER_RCVR_IDX)
 
 
-@jit.dont_look_inside
-def _return_field_0(current_bc_idx, next_bc_idx,  method, frame, stack, dummy=False):
-    if dummy:
-        return nilObject
+@enable_shallow_tracing_with_value(nilObject)
+def _return_field_0(current_bc_idx, next_bc_idx,  method, frame, stack):
     self_obj = read_frame(frame, FRAME_AND_INNER_RCVR_IDX)
     return self_obj.get_field(0)
 
 
-@jit.dont_look_inside
-def _return_field_1(current_bc_idx, next_bc_idx,  method, frame, stack, dummy=False):
-    if dummy:
-        return nilObject
+@enable_shallow_tracing_with_value(nilObject)
+def _return_field_1(current_bc_idx, next_bc_idx,  method, frame, stack):
     self_obj = read_frame(frame, FRAME_AND_INNER_RCVR_IDX)
     return self_obj.get_field(1)
 
 
-@jit.dont_look_inside
-def _return_field_2(current_bc_idx, next_bc_idx,  method, frame, stack, dummy=False):
-    if dummy:
-        return nilObject
+@enable_shallow_tracing_with_value(nilObject)
+def _return_field_2(current_bc_idx, next_bc_idx,  method, frame, stack):
     self_obj = read_frame(frame, FRAME_AND_INNER_RCVR_IDX)
     return self_obj.get_field(2)
 
@@ -982,7 +974,7 @@ def interpret_tier1(
                             tstack=t_empty(),
                             dummy=True,
                         )
-                        stack.insert(0, result)
+                        stack.insert(0, result, dummy=True)
                         # This path is a slow path, going this way when the rcvr type is
                         # different from when it is compiled
                         jit.begin_slow_path()
@@ -1029,7 +1021,7 @@ def interpret_tier1(
                             tstack=t_empty(),
                             dummy=True,
                         )
-                        stack.insert(0, result)
+                        stack.insert(0, result, dummy=True)
                         # ---------------------------------------------------------------
                         jit.begin_slow_path()
                         next_bc_idx = _send_2(
@@ -1076,7 +1068,7 @@ def interpret_tier1(
                             tstack=t_empty(),
                             dummy=True,
                         )
-                        stack.insert(0, result)
+                        stack.insert(0, result, dummy=True)
                         # ---------------------------------------------------------------
                         jit.begin_slow_path()
                         next_bc_idx = _send_3(
@@ -1110,8 +1102,8 @@ def interpret_tier1(
             #         )
             #     else:
             #         signature = method.get_constant(current_bc_idx)
-            #         signature_num_args = signature.get_number_of_signature_arguments()
-            #         rcvr = stack.take(signature_num_args - 1, dummy=True)
+            #         num_args = signature.get_number_of_signature_arguments()
+            #         rcvr = stack.take(num_args - 1, dummy=True)
             #         if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
             #             invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
             #             new_frame = _create_frame(invokable, frame, stack)
@@ -1125,7 +1117,6 @@ def interpret_tier1(
             #                 tstack=t_empty(),
             #                 dummy=True,
             #             )
-            #             num_args = invokable.get_number_of_arguments()
             #             stack = stack_pop_old_arguments_and_push_result_dli(
             #                 stack, num_args, result, dummy=True)
             #             # ---------------------------------------------------------------
@@ -1156,7 +1147,7 @@ def interpret_tier1(
         elif bytecode == Bytecodes.return_local:
             if we_are_jitted():
                 if tstack.t_is_empty():
-                    ret_object = _return_local(current_bc_idx, next_bc_idx,  method, frame, stack, dummy=True)
+                    ret_object = _return_local(current_bc_idx, next_bc_idx,  method, frame, stack)
                     # next_bc_idx = emit_ret(entry_bc_idx, ret_object)
                     jit.emit_ret(ret_object)
                     next_bc_idx = entry_bc_idx # HACK: close this loop
@@ -1169,7 +1160,7 @@ def interpret_tier1(
                         tstack=tstack,
                     )
                 else:
-                    ret_object = _return_local(current_bc_idx, next_bc_idx,  method, frame, stack, dummy=True)
+                    ret_object = _return_local(current_bc_idx, next_bc_idx,  method, frame, stack)
                     next_bc_idx, tstack = tstack.t_pop()
                     # next_bc_idx = emit_ret(next_bc_idx, ret_object)
                     jit.emit_ret(ret_object)
@@ -1211,7 +1202,7 @@ def interpret_tier1(
         elif bytecode == Bytecodes.return_self:
             if we_are_jitted():
                 if tstack.t_is_empty():
-                    ret_object = _return_self(current_bc_idx, next_bc_idx,  method, frame, stack, dummy=True)
+                    ret_object = _return_self(current_bc_idx, next_bc_idx,  method, frame, stack)
                     # next_bc_idx = emit_ret(entry_bc_idx, ret_object)
                     jit.emit_ret(ret_object)
                     next_bc_idx = entry_bc_idx # HACK: close this loop
@@ -1224,7 +1215,7 @@ def interpret_tier1(
                         tstack=tstack,
                     )
                 else:
-                    ret_object = _return_self(current_bc_idx, next_bc_idx,  method, frame, stack, dummy=True)
+                    ret_object = _return_self(current_bc_idx, next_bc_idx,  method, frame, stack)
                     next_bc_idx, tstack = tstack.t_pop()
                     # next_bc_idx = emit_ret(next_bc_idx, ret_object)
                     jit.emit_ret(ret_object)
@@ -1319,6 +1310,14 @@ def interpret_tier1(
                     jit.emit_jump(target_bc_idx)
             else:
                 next_bc_idx = entry_bc_idx = target_bc_idx
+                # tier1jitdriver.can_enter_jit(
+                #     current_bc_idx=target_bc_idx,
+                #     entry_bc_idx=entry_bc_idx,
+                #     method=method,
+                #     frame=frame,
+                #     stack=stack,
+                #     tstack=tstack,
+                # )
 
         elif bytecode == Bytecodes.jump_if_greater:
             target_bc_idx = current_bc_idx + method.get_bytecode(current_bc_idx + 1)
