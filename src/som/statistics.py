@@ -37,6 +37,12 @@ class _Statistics(object):
 
     @not_in_trace
     def report(self):
-        debug_print("%d,%d,%d" % (self.primitive_send, self.trivial_send, self.method_send))
+        send_all = self.primitive_send + self.method_send + self.trivial_send
+        debug_print("======== Statistics Report =============")
+        debug_print("Ratio of SEND")
+        debug_print("primitive, trivial, method")
+        debug_print("%f,%f,%f" % (float(self.primitive_send) / send_all,
+                                  float(self.trivial_send) / send_all,
+                                  float(self.method_send) / send_all))
 
 statistics = _Statistics()
