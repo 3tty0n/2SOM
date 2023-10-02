@@ -9,7 +9,7 @@ from som.interpreter.ast.frame import (
     create_frame_2,
     mark_as_no_longer_on_stack,
 )
-from som.interpreter.bc.frame import create_frame_3, create_frame, stack_pop_old_arguments_and_push_result_dli
+from som.interpreter.bc.frame import create_frame_3, create_frame_4, create_frame
 from som.interpreter.bc.bytecodes import bytecode_length, Bytecodes, bytecode_as_str
 from som.interpreter.bc.frame import (
     get_block_at,
@@ -76,7 +76,7 @@ class Stack(object):
         assert n <= self.stack_ptr
         self.items[self.stack_ptr - n] = w_x
 
-    @jit.dont_look_inside
+    @dont_look_inside
     def dump(self):
         s = "["
         for w_v in self.items:
@@ -124,6 +124,11 @@ def _push_frame_2(current_bc_idx, next_bc_idx,  method, frame, stack):
 
 
 @enable_shallow_tracing
+def _push_frame_3(current_bc_idx, next_bc_idx,  method, frame, stack):
+    stack.push(read_frame(frame, FRAME_AND_INNER_RCVR_IDX + 3))
+
+
+@enable_shallow_tracing
 def _push_inner(current_bc_idx, next_bc_idx,  method, frame, stack):
     idx = method.get_bytecode(current_bc_idx + 1)
     ctx_level = method.get_bytecode(current_bc_idx + 2)
@@ -149,6 +154,9 @@ def _push_inner_1(current_bc_idx, next_bc_idx,  method, frame, stack):
 def _push_inner_2(current_bc_idx, next_bc_idx,  method, frame, stack):
     stack.push(read_inner(frame, FRAME_AND_INNER_RCVR_IDX + 2))
 
+@enable_shallow_tracing
+def _push_inner_3(current_bc_idx, next_bc_idx,  method, frame, stack):
+    stack.push(read_inner(frame, FRAME_AND_INNER_RCVR_IDX + 3))
 
 @enable_shallow_tracing
 def _push_field(current_bc_idx, next_bc_idx,  method, frame, stack):
@@ -260,6 +268,12 @@ def _pop_frame_1(current_bc_idx, next_bc_idx,  method, frame, stack):
 def _pop_frame_2(current_bc_idx, next_bc_idx,  method, frame, stack):
     value = stack.pop()
     write_frame(frame, FRAME_AND_INNER_RCVR_IDX + 2, value)
+
+
+@enable_shallow_tracing
+def _pop_frame_3(current_bc_idx, next_bc_idx,  method, frame, stack):
+    value = stack.pop()
+    write_frame(frame, FRAME_AND_INNER_RCVR_IDX + 3, value)
 
 
 @enable_shallow_tracing
@@ -391,6 +405,22 @@ def _create_frame_3(invokable, frame, stack):
 
 
 @enable_shallow_tracing_argn(1)
+def _create_frame_4(invokable, frame, stack):
+    rcvr = stack.take(3)
+    arg3 = stack.pop()
+    arg2 = stack.pop()
+    arg1 = stack.pop()
+    return create_frame_4(
+        invokable.get_arg_inner_access(),
+        invokable.get_size_frame(),
+        invokable.get_size_inner(),
+        rcvr,
+        arg1,
+        arg2,
+        arg3
+    )
+
+@enable_shallow_tracing_argn(1)
 def _create_frame(invokable, frame, stack):
     return create_frame(
         invokable.get_arg_inner_access(),
@@ -496,6 +526,42 @@ def _send_3(current_bc_idx, next_bc_idx,  method, frame, stack):
         arg2 = stack.pop()
         arg1 = stack.pop()
         stack.insert(0, invokable.invoke_3(receiver, arg1, arg2))
+    elif not layout.is_latest:
+        _update_object_and_invalidate_old_caches(
+            receiver, method, current_bc_idx, current_universe
+        )
+        next_bc_idx = current_bc_idx
+    else:
+        _send_does_not_understand(receiver, signature, stack)
+
+    return next_bc_idx
+
+
+@enable_shallow_tracing_argn(1)
+def _send_4(current_bc_idx, next_bc_idx,  method, frame, stack):
+    from som.vmobjects.method_bc import BcMethod
+    from som.vm.current import current_universe
+    from som.statistics import statistics
+
+    signature = method.get_constant(current_bc_idx)
+    receiver = stack.take(3)
+    layout = receiver.get_object_layout(current_universe)
+    invokable = _lookup(layout, signature, method, current_bc_idx)
+
+    if not we_are_jitted():
+        if isinstance(invokable, BcMethod):
+            rcvr_type = receiver.get_class(current_universe)
+            method.set_receiver_type(current_bc_idx, rcvr_type)
+
+    if not we_are_translated():
+        statistics.incr(invokable)
+
+    if invokable is not None:
+        arg3 = stack.pop()
+        arg2 = stack.pop()
+        arg1 = stack.pop()
+        result = invokable.invoke_4(receiver, arg1, arg2, arg3)
+        stack.insert(0, result)
     elif not layout.is_latest:
         _update_object_and_invalidate_old_caches(
             receiver, method, current_bc_idx, current_universe
@@ -807,7 +873,7 @@ def interpret_tier1(
 
         # promote(stack_ptr)
 
-        # print get_printable_location_tier1(current_bc_idx, entry_bc_idx, method, tstack)
+        # print(get_printable_location_tier1(current_bc_idx, entry_bc_idx, method, tstack))
 
         # Handle the current bytecode
         if bytecode == Bytecodes.halt:
@@ -1076,6 +1142,53 @@ def interpret_tier1(
                         # ---------------------------------------------------------------
             else:
                 next_bc_idx = _send_3(
+                    current_bc_idx,
+                    next_bc_idx,
+                    method,
+                    frame,
+                    stack
+                )
+
+        elif bytecode == Bytecodes.send_4:
+            if we_are_jitted():
+                rcvr_type = method.get_receiver_type(current_bc_idx)
+                if rcvr_type is None:
+                    next_bc_idx = _send_4(
+                        current_bc_idx,
+                        next_bc_idx,
+                        method,
+                        frame,
+                        stack
+                    )
+                else:
+                    rcvr = stack.take(3, dummy=True)
+                    if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
+                        invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
+                        new_frame = _create_frame_4(invokable, frame, stack)
+                        new_stack = Stack(16)
+                        result = _interpret_CALL_ASSEMBLER(
+                            frame=new_frame,
+                            stack=new_stack,
+                            current_bc_idx=0,
+                            entry_bc_idx=0,
+                            method=invokable,
+                            tstack=t_empty(),
+                            dummy=True,
+                        )
+                        stack.insert(0, result, dummy=True)
+                        # ---------------------------------------------------------------
+                        jit.begin_slow_path()
+                        next_bc_idx = _send_4(
+                            current_bc_idx,
+                            next_bc_idx,
+                            method,
+                            frame,
+                            stack
+                        )
+                        jit.end_slow_path()
+                        # ---------------------------------------------------------------
+            else:
+                next_bc_idx = _send_4(
                     current_bc_idx,
                     next_bc_idx,
                     method,

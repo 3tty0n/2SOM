@@ -38,6 +38,7 @@ from som.interpreter.bc.frame import (
     create_frame,
     stack_pop_old_arguments_and_push_result,
     create_frame_3,
+    create_frame_4
 )
 from som.interpreter.bc.interpreter import interpret
 from som.interpreter.bc.interpreter_tier2 import interpret_tier2
@@ -322,6 +323,30 @@ class BcMethod(BcAbstractMethod):
         )
         return interpret_tier2(self, new_frame, self._maximum_number_of_stack_elements)
 
+    def invoke_4(self, rcvr, arg1, arg2, arg3, ctx=None):
+        new_frame = create_frame_4(
+            self._arg_inner_access,
+            self._size_frame,
+            self._size_inner,
+            rcvr,
+            arg1,
+            arg2,
+            arg3
+        )
+        return interpret(self, new_frame, self._maximum_number_of_stack_elements)
+
+    def invoke_4_tier2(self, rcvr, arg1, arg2, arg3, ctx=None):
+        new_frame = create_frame_4(
+            self._arg_inner_access,
+            self._size_frame,
+            self._size_inner,
+            rcvr,
+            arg1,
+            arg2,
+            arg3
+        )
+        return interpret_tier2(self, new_frame, self._maximum_number_of_stack_elements)
+
     def invoke_n(self, stack, stack_ptr, ctx=None):
         new_frame = create_frame(
             self._arg_inner_access,
@@ -494,6 +519,7 @@ class BcMethod(BcAbstractMethod):
                 bytecode == Bytecodes.send_1
                 or bytecode == Bytecodes.send_2
                 or bytecode == Bytecodes.send_3
+                or bytecode == Bytecodes.send_4
                 or bytecode == Bytecodes.send_n
             ):
                 literal_idx = self.get_bytecode(i + 1)
@@ -596,6 +622,7 @@ class BcMethod(BcAbstractMethod):
                 or bytecode == Bytecodes.send_1
                 or bytecode == Bytecodes.send_2
                 or bytecode == Bytecodes.send_3
+                or bytecode == Bytecodes.send_4
                 or bytecode == Bytecodes.send_n
                 or bytecode == Bytecodes.super_send
                 or bytecode == Bytecodes.return_local

@@ -58,7 +58,8 @@ class Bytecodes(object):
     send_1 = nil_inner + 1
     send_2 = send_1 + 1
     send_3 = send_2 + 1
-    send_n = send_3 + 1
+    send_4 = send_3 + 1
+    send_n = send_4 + 1
 
     super_send = send_n + 1
 
@@ -87,7 +88,8 @@ class Bytecodes(object):
     q_super_send_1 = jump2_backward + 1
     q_super_send_2 = q_super_send_1 + 1
     q_super_send_3 = q_super_send_2 + 1
-    q_super_send_n = q_super_send_3 + 1
+    q_super_send_4 = q_super_send_3 + 1
+    q_super_send_n = q_super_send_4 + 1
 
     push_local = q_super_send_n + 1
     push_argument = push_local + 1
@@ -179,6 +181,7 @@ RUN_TIME_ONLY_BYTECODES = [
     Bytecodes.q_super_send_1,
     Bytecodes.q_super_send_2,
     Bytecodes.q_super_send_3,
+    Bytecodes.q_super_send_4,
     Bytecodes.q_super_send_n,
 ]
 
@@ -233,6 +236,7 @@ _BYTECODE_LENGTH = [
     2,  # send_1
     2,  # send_2
     2,  # send_3
+    2,  # send_4
     2,  # send_n
     2,  # super_send
     1,  # return_local
@@ -257,6 +261,7 @@ _BYTECODE_LENGTH = [
     2,  # q_super_send_1
     2,  # q_super_send_2
     2,  # q_super_send_3
+    2,  # q_super_send_4
     2,  # q_super_send_n
     # rewritten on first use
     3,  # push_local
@@ -311,6 +316,7 @@ _BYTECODE_STACK_EFFECT = [
     _STACK_EFFECT_DEPENDS_ON_MESSAGE,  # send_1
     _STACK_EFFECT_DEPENDS_ON_MESSAGE,  # send_2
     _STACK_EFFECT_DEPENDS_ON_MESSAGE,  # send_3
+    _STACK_EFFECT_DEPENDS_ON_MESSAGE,  # send_4
     _STACK_EFFECT_DEPENDS_ON_MESSAGE,  # send_n
     _STACK_EFFECT_DEPENDS_ON_MESSAGE,  # super_send
     0,  # return_local
@@ -335,6 +341,7 @@ _BYTECODE_STACK_EFFECT = [
     _STACK_EFFECT_DEPENDS_ON_MESSAGE,  # q_super_send_1
     _STACK_EFFECT_DEPENDS_ON_MESSAGE,  # q_super_send_2
     _STACK_EFFECT_DEPENDS_ON_MESSAGE,  # q_super_send_3
+    _STACK_EFFECT_DEPENDS_ON_MESSAGE,  # q_super_send_4
     _STACK_EFFECT_DEPENDS_ON_MESSAGE,  # q_super_send_n
     1,  # push_argument
     1,  # push_field
