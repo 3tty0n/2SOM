@@ -76,7 +76,7 @@ class Stack(object):
         assert n <= self.stack_ptr
         self.items[self.stack_ptr - n] = w_x
 
-    @jit.dont_look_inside
+    @dont_look_inside
     def dump(self):
         s = "["
         for w_v in self.items:
@@ -405,6 +405,22 @@ def _create_frame_3(invokable, frame, stack):
 
 
 @enable_shallow_tracing_argn(1)
+def _create_frame_4(invokable, frame, stack):
+    rcvr = stack.take(3)
+    arg3 = stack.pop()
+    arg2 = stack.pop()
+    arg1 = stack.pop()
+    return create_frame_4(
+        invokable.get_arg_inner_access(),
+        invokable.get_size_frame(),
+        invokable.get_size_inner(),
+        rcvr,
+        arg1,
+        arg2,
+        arg3
+    )
+
+@enable_shallow_tracing_argn(1)
 def _create_frame(invokable, frame, stack):
     return create_frame(
         invokable.get_arg_inner_access(),
@@ -531,7 +547,6 @@ def _send_4(current_bc_idx, next_bc_idx,  method, frame, stack):
     receiver = stack.take(3)
     layout = receiver.get_object_layout(current_universe)
     invokable = _lookup(layout, signature, method, current_bc_idx)
-    #invokable = layout.lookup_invokable(signature)
 
     if not we_are_jitted():
         if isinstance(invokable, BcMethod):
@@ -545,7 +560,8 @@ def _send_4(current_bc_idx, next_bc_idx,  method, frame, stack):
         arg3 = stack.pop()
         arg2 = stack.pop()
         arg1 = stack.pop()
-        stack.insert(0, invokable.invoke_4(receiver, arg1, arg2, arg3))
+        result = invokable.invoke_4(receiver, arg1, arg2, arg3)
+        stack.insert(0, result)
     elif not layout.is_latest:
         _update_object_and_invalidate_old_caches(
             receiver, method, current_bc_idx, current_universe
@@ -857,7 +873,7 @@ def interpret_tier1(
 
         # promote(stack_ptr)
 
-        # print get_printable_location_tier1(current_bc_idx, entry_bc_idx, method, tstack)
+        # print(get_printable_location_tier1(current_bc_idx, entry_bc_idx, method, tstack))
 
         # Handle the current bytecode
         if bytecode == Bytecodes.halt:
@@ -881,9 +897,6 @@ def interpret_tier1(
         elif bytecode == Bytecodes.push_frame_2:
             _push_frame_2(current_bc_idx, next_bc_idx, method, frame, stack)
 
-        elif bytecode == Bytecodes.push_frame_3:
-            _push_frame_3(current_bc_idx, next_bc_idx, method, frame, stack)
-
         elif bytecode == Bytecodes.push_inner:
             _push_inner(current_bc_idx, next_bc_idx, method, frame, stack)
 
@@ -895,9 +908,6 @@ def interpret_tier1(
 
         elif bytecode == Bytecodes.push_inner_2:
             _push_inner_2(current_bc_idx, next_bc_idx, method, frame, stack)
-
-        elif bytecode == Bytecodes.push_inner_3:
-            _push_inner_3(current_bc_idx, next_bc_idx, method, frame, stack)
 
         elif bytecode == Bytecodes.push_field:
             _push_field(current_bc_idx, next_bc_idx, method, frame, stack)
@@ -953,9 +963,6 @@ def interpret_tier1(
         elif bytecode == Bytecodes.pop_frame_2:
             _pop_frame_2(current_bc_idx, next_bc_idx, method, frame, stack)
 
-        elif bytecode == Bytecodes.pop_frame_3:
-            _pop_frame_3(current_bc_idx, next_bc_idx, method, frame, stack)
-
         elif bytecode == Bytecodes.pop_inner:
             _pop_inner(current_bc_idx, next_bc_idx, method, frame, stack)
 
@@ -967,9 +974,6 @@ def interpret_tier1(
 
         elif bytecode == Bytecodes.pop_inner_2:
             _pop_inner_2(current_bc_idx, next_bc_idx, method, frame, stack)
-
-        elif bytecode == Bytecodes.pop_inner_3:
-            _pop_inner_3(current_bc_idx, next_bc_idx, method, frame, stack)
 
         elif bytecode == Bytecodes.nil_frame:
             _nil_frame(current_bc_idx, next_bc_idx, method, frame, stack)
@@ -1149,7 +1153,7 @@ def interpret_tier1(
             if we_are_jitted():
                 rcvr_type = method.get_receiver_type(current_bc_idx)
                 if rcvr_type is None:
-                    next_bc_idx = _send_3(
+                    next_bc_idx = _send_4(
                         current_bc_idx,
                         next_bc_idx,
                         method,
@@ -1160,7 +1164,7 @@ def interpret_tier1(
                     rcvr = stack.take(3, dummy=True)
                     if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
                         invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
-                        new_frame = _create_frame_3(invokable, frame, stack)
+                        new_frame = _create_frame_4(invokable, frame, stack)
                         new_stack = Stack(16)
                         result = _interpret_CALL_ASSEMBLER(
                             frame=new_frame,
@@ -1174,7 +1178,7 @@ def interpret_tier1(
                         stack.insert(0, result, dummy=True)
                         # ---------------------------------------------------------------
                         jit.begin_slow_path()
-                        next_bc_idx = _send_3(
+                        next_bc_idx = _send_4(
                             current_bc_idx,
                             next_bc_idx,
                             method,
