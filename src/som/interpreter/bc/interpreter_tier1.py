@@ -450,7 +450,7 @@ def _send_1(current_bc_idx, next_bc_idx,  method, frame, stack):
             method.set_receiver_type(current_bc_idx, rcvr_type)
 
     if not we_are_translated():
-        statistics.incr(invokable)
+        statistics.incr_with_idx(invokable, 1)
 
     if invokable is not None:
         stack.insert(0, invokable.invoke_1(receiver))
@@ -487,7 +487,7 @@ def _send_2(current_bc_idx, next_bc_idx,  method, frame, stack):
             method.set_receiver_type(current_bc_idx, rcvr_type)
 
     if not we_are_translated():
-        statistics.incr(invokable)
+        statistics.incr_with_idx(invokable, 2)
 
     if invokable is not None:
         arg = stack.pop()
@@ -520,7 +520,7 @@ def _send_3(current_bc_idx, next_bc_idx,  method, frame, stack):
             method.set_receiver_type(current_bc_idx, rcvr_type)
 
     if not we_are_translated():
-        statistics.incr(invokable)
+        statistics.incr_with_idx(invokable, 3)
 
     if invokable is not None:
         arg2 = stack.pop()
@@ -554,7 +554,7 @@ def _send_4(current_bc_idx, next_bc_idx,  method, frame, stack):
             method.set_receiver_type(current_bc_idx, rcvr_type)
 
     if not we_are_translated():
-        statistics.incr(invokable)
+        statistics.incr_with_idx(invokable, 10)
 
     if invokable is not None:
         arg3 = stack.pop()
@@ -593,7 +593,7 @@ def _send_n(current_bc_idx, next_bc_idx, method, frame, stack):
             method.set_receiver_type(current_bc_idx, rcvr_type)
 
     if not we_are_translated():
-        statistics.incr(invokable)
+        statistics.incr_with_idx(invokable, 10)
 
     if invokable is not None:
         stack.stack_ptr = invokable.invoke_n(stack.items, stack.stack_ptr)
