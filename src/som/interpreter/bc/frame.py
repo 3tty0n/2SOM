@@ -133,43 +133,34 @@ def create_frame_4(
 
         inner[_INNER_ON_STACK_IDX] = trueObject
         inner[FRAME_AND_INNER_RCVR_IDX] = receiver
+        arg_i = 2
+        frame_i = FRAME_AND_INNER_RCVR_IDX + 1
+        inner_i = _FRAME_AND_INNER_FIRST_ARG
+        args = [arg3, arg2, arg1]
 
-        if arg_inner_access_reversed[2]:
-            inner[FRAME_AND_INNER_RCVR_IDX + 1] = arg1
-            if arg_inner_access_reversed[1]:
-                inner[FRAME_AND_INNER_RCVR_IDX + 2] = arg2
-                if arg_inner_access_reversed[0]:
-                    inner[FRAME_AND_INNER_RCVR_IDX + 3] = arg3
-                else:
-                    frame[FRAME_AND_INNER_RCVR_IDX + 1] = _erase_obj(arg3)
+        while arg_i >= 0:
+            arg_val = args.pop()
+            if arg_inner_access_reversed[arg_i]:
+                inner[inner_i] = arg_val
+                inner_i += 1
             else:
-                frame[FRAME_AND_INNER_RCVR_IDX + 1] = _erase_obj(arg2)
-                if arg_inner_access_reversed[0]:
-                    inner[FRAME_AND_INNER_RCVR_IDX + 2] = arg3
-                else:
-                    frame[FRAME_AND_INNER_RCVR_IDX + 1] = _erase_obj(arg3)
-        else:
-            frame[FRAME_AND_INNER_RCVR_IDX + 1] = _erase_obj(arg1)
-            if arg_inner_access_reversed[1]:
-                inner[FRAME_AND_INNER_RCVR_IDX + 1] = arg2
-                if arg_inner_access_reversed[0]:
-                    inner[FRAME_AND_INNER_RCVR_IDX + 2] = arg3
-                else:
-                    frame[FRAME_AND_INNER_RCVR_IDX + 2] = _erase_obj(arg3)
-            else:
-                frame[FRAME_AND_INNER_RCVR_IDX + 2] = _erase_obj(arg2)
-                if arg_inner_access_reversed[0]:
-                    inner[FRAME_AND_INNER_RCVR_IDX + 1] = arg3
-                else:
-                    frame[FRAME_AND_INNER_RCVR_IDX + 3] = _erase_obj(arg3)
-
+                frame[frame_i] = _erase_obj(arg_val)
+                frame_i += 1
+            arg_i -= 1
     else:
         frame[0] = _erase_list(None)
         frame[FRAME_AND_INNER_RCVR_IDX] = _erase_obj(receiver)
-        frame[FRAME_AND_INNER_RCVR_IDX + 1] = _erase_obj(arg1)
-        frame[FRAME_AND_INNER_RCVR_IDX + 2] = _erase_obj(arg2)
-        frame[FRAME_AND_INNER_RCVR_IDX + 3] = _erase_obj(arg3)
+        arg_i = 2
+        frame_i = _FRAME_AND_INNER_FIRST_ARG
+        args = [arg3, arg2, arg1]
 
+        while arg_i >= 0:
+            arg_val = args.pop()
+            frame[frame_i] = _erase_obj(arg_val)
+            frame_i += 1
+            arg_i -= 1
+
+    return frame
 
 
 @jit.unroll_safe
