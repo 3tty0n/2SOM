@@ -410,6 +410,34 @@ def interpret_tier2(
                     receiver, signature, stack, stack_ptr
                 )
 
+        elif bytecode == Bytecodes.send_4:
+            signature = method.get_constant(current_bc_idx)
+            receiver = stack[stack_ptr - 3]
+
+            layout = receiver.get_object_layout(current_universe)
+            invokable = _lookup(layout, signature, method, current_bc_idx)
+            if invokable is not None:
+                arg3 = stack[stack_ptr]
+                arg2 = stack[stack_ptr - 1]
+                arg1 = stack[stack_ptr - 2]
+
+                if we_are_jitted():
+                    stack[stack_ptr] = None
+                    stack[stack_ptr - 1] = None
+                    stack[stack_ptr - 2] = None
+
+                stack_ptr -= 3
+                stack[stack_ptr] = invokable.invoke_4_tier2(receiver, arg1, arg2, arg3)
+            elif not layout.is_latest:
+                _update_object_and_invalidate_old_caches(
+                    receiver, method, current_bc_idx, current_universe
+                )
+                next_bc_idx = current_bc_idx
+            else:
+                stack_ptr = _send_does_not_understand_tier2(
+                    receiver, signature, stack, stack_ptr
+                )
+
         elif bytecode == Bytecodes.send_n:
             signature = method.get_constant(current_bc_idx)
             receiver = stack[
@@ -622,7 +650,7 @@ def interpret_tier2(
 
         elif bytecode == Bytecodes.q_super_send_1:
             invokable = method.get_inline_cache_invokable(current_bc_idx)
-            stack[stack_ptr] = invokable.invoke_1(stack[stack_ptr])
+            stack[stack_ptr] = invokable.invoke_1_tier2(stack[stack_ptr])
 
         elif bytecode == Bytecodes.q_super_send_2:
             invokable = method.get_inline_cache_invokable(current_bc_idx)
@@ -630,7 +658,7 @@ def interpret_tier2(
             if we_are_jitted():
                 stack[stack_ptr] = None
             stack_ptr -= 1
-            stack[stack_ptr] = invokable.invoke_2(stack[stack_ptr], arg)
+            stack[stack_ptr] = invokable.invoke_2_tier2(stack[stack_ptr], arg)
 
         elif bytecode == Bytecodes.q_super_send_3:
             invokable = method.get_inline_cache_invokable(current_bc_idx)
@@ -640,19 +668,19 @@ def interpret_tier2(
                 stack[stack_ptr] = None
                 stack[stack_ptr - 1] = None
             stack_ptr -= 2
-            stack[stack_ptr] = invokable.invoke_3(stack[stack_ptr], arg1, arg2)
+            stack[stack_ptr] = invokable.invoke_3_tier2(stack[stack_ptr], arg1, arg2)
 
         elif bytecode == Bytecodes.q_super_send_4:
             invokable = method.get_inline_cache_invokable(current_bc_idx)
             arg3 = stack[stack_ptr]
             arg2 = stack[stack_ptr - 1]
-            arg2 = stack[stack_ptr - 2]
+            arg1 = stack[stack_ptr - 2]
             if we_are_jitted():
                 stack[stack_ptr] = None
                 stack[stack_ptr - 1] = None
                 stack[stack_ptr - 2] = None
             stack_ptr -= 3
-            stack[stack_ptr] = invokable.invoke_4(stack[stack_ptr], arg1, arg2)
+            stack[stack_ptr] = invokable.invoke_4_tier2(stack[stack_ptr], arg1, arg2, arg3)
 
         elif bytecode == Bytecodes.q_super_send_n:
             invokable = method.get_inline_cache_invokable(current_bc_idx)
