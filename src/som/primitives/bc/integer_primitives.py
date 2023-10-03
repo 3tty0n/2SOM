@@ -23,6 +23,17 @@ jitdriver_int = jit.JitDriver(
     get_printable_location=get_printable_location_up,
 )
 
+tier1jitdriver_int = jit.JitDriver(
+    name="to:do: with int",
+    greens=["block_method"],
+    reds="auto",
+    # virtualizables=['frame'],
+    is_recursive=True,
+    get_printable_location=get_printable_location_up,
+    threaded_code_gen=True,
+    conditions=["_is_true_object", "_is_false_object", "_is_greater_two"],
+)
+
 jitdriver_double = jit.JitDriver(
     name="to:do: with double",
     greens=["block_method"],
@@ -30,6 +41,17 @@ jitdriver_double = jit.JitDriver(
     # virtualizables=['frame'],
     is_recursive=True,
     get_printable_location=get_printable_location_up,
+)
+
+tier1jitdriver_double = jit.JitDriver(
+    name="to:do: with double",
+    greens=["block_method"],
+    reds="auto",
+    # virtualizables=['frame'],
+    is_recursive=True,
+    get_printable_location=get_printable_location_up,
+    threaded_code_gen=True,
+    conditions=["_is_true_object", "_is_false_object", "_is_greater_two"],
 )
 
 
@@ -49,7 +71,27 @@ jitdriver_int_down = jit.JitDriver(
     get_printable_location=get_printable_location_down,
 )
 
+tier1jitdriver_int_down = jit.JitDriver(
+    name="downTo:do: with int",
+    greens=["block_method"],
+    reds="auto",
+    # virtualizables=['frame'],
+    is_recursive=True,
+    get_printable_location=get_printable_location_down,
+    threaded_code_gen=True,
+    conditions=["_is_true_object", "_is_false_object", "_is_greater_two"],
+)
+
 jitdriver_double_down = jit.JitDriver(
+    name="downTo:do: with double",
+    greens=["block_method"],
+    reds="auto",
+    # virtualizables=['frame'],
+    is_recursive=True,
+    get_printable_location=get_printable_location_down,
+)
+
+tier1jitdriver_double_down = jit.JitDriver(
     name="downTo:do: with double",
     greens=["block_method"],
     reds="auto",
@@ -63,7 +105,10 @@ def _to_do_int(i, by_increment, top, block, block_method):
     assert isinstance(i, int)
     assert isinstance(top, int)
     while i <= top:
-        jitdriver_int.jit_merge_point(block_method=block_method)
+        if is_tier1():
+            tier1jitdriver_int.jit_merge_point(block_method=block_method)
+        else:
+            jitdriver_int.jit_merge_point(block_method=block_method)
 
         if is_tier1():
             block_method.invoke_2(block, Integer(i))
