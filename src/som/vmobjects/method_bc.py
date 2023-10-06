@@ -84,8 +84,8 @@ class BcAbstractMethod(AbstractMethod):
         self._inline_cache_invokable = [None] * num_bytecodes
 
         self._receiver_types = [None] * num_bytecodes
+        self._receiver_types_primitive = [None] * num_bytecodes
         self._selectors = [None] * num_bytecodes
-        self._invokable = [None] * num_bytecodes
 
         self._counts = [0] * num_bytecodes
 
@@ -223,17 +223,21 @@ class BcAbstractMethod(AbstractMethod):
         assert 0 <= bytecode_index < len(self._receiver_types)
         return self._receiver_types[bytecode_index]
 
-    def set_invokable(self, bytecode_index, invokable):
-        self._invokable[bytecode_index] = invokable
+    @jit.elidable
+    def has_receiver_type(self, bytecode_index):
+        return self._receiver_types[bytecode_index] is not None
+
+    def set_receiver_type_primitive(self, bytecode_index, receiver_type):
+        self._receiver_types_primitive[bytecode_index] = receiver_type
+
+    @jit.elidable_promote("all")
+    def get_receiver_type_primitive(self, bytecode_index):
+        assert 0 <= bytecode_index < len(self._receiver_types)
+        return self._receiver_types_primitive[bytecode_index]
 
     @jit.elidable
-    def get_invokable(self, bytecode_index):
-        assert 0 <= bytecode_index < len(self._invokable)
-        return self._invokable[bytecode_index]
-
-    @jit.elidable
-    def has_invokable(self, bytecode_index):
-        return self._invokable[bytecode_index] is not None
+    def has_receiver_type_primitive(self, bytecode_index):
+        return self._receiver_types_primitive[bytecode_index] is not None
 
     def get_count(self, bytecode_index):
         assert 0 <= bytecode_index < len(self._counts)

@@ -1,5 +1,6 @@
 from som.interp_type import is_ast_interpreter
 from som.vmobjects.abstract_object import AbstractObject
+from rlib.jit import elidable, dont_look_inside
 
 
 class _AbstractPrimitive(AbstractObject):
@@ -47,6 +48,10 @@ class _AbstractPrimitive(AbstractObject):
             holder = "nil"
         return "Primitive(" + holder + ">>" + str(self.get_signature()) + ")"
 
+    @dont_look_inside
+    def get_prim_fn(self):
+        raise NotImplementedError
+
 
 class _AstPrimitive(_AbstractPrimitive):
     _immutable_fields_ = ["_prim_fn"]
@@ -78,6 +83,10 @@ class _BcPrimitive(_AbstractPrimitive):
     def get_number_of_signature_arguments(self):
         return self._signature.get_number_of_signature_arguments()
 
+    @dont_look_inside
+    def get_prim_fn(self):
+        return self._prim_fn
+
 
 class UnaryPrimitive(_AbstractPrimitive):
     _immutable_fields_ = ["_prim_fn"]
@@ -96,6 +105,10 @@ class UnaryPrimitive(_AbstractPrimitive):
 
     def get_number_of_signature_arguments(self):  # pylint: disable=no-self-use
         return 1
+
+    @dont_look_inside
+    def get_prim_fn(self):
+        return self._prim_fn
 
 
 class BinaryPrimitive(_AbstractPrimitive):
@@ -116,6 +129,10 @@ class BinaryPrimitive(_AbstractPrimitive):
     def get_number_of_signature_arguments(self):  # pylint: disable=no-self-use
         return 2
 
+    @dont_look_inside
+    def get_prim_fn(self):
+        return self._prim_fn
+
 
 class TernaryPrimitive(_AbstractPrimitive):
     _immutable_fields_ = ["_prim_fn"]
@@ -134,6 +151,10 @@ class TernaryPrimitive(_AbstractPrimitive):
 
     def get_number_of_signature_arguments(self):  # pylint: disable=no-self-use
         return 3
+
+    @dont_look_inside
+    def get_prim_fn(self):
+        return self._prim_fn
 
 
 def _empty_invoke_ast(ivkbl, _rcvr, _args):

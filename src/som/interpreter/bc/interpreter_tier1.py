@@ -22,6 +22,7 @@ from som.interpreter.control_flow import ReturnException
 from som.interpreter.send import lookup_and_send_2, lookup_and_send_3, lookup_and_send_2_tier2, lookup_and_send_3_tier2
 from som.tier_type import is_hybrid, is_tier1, is_tier2, tier_manager
 from som.vm.globals import nilObject, trueObject, falseObject
+from som.vmobjects.abstract_object import AbstractObject
 from som.vmobjects.array import Array
 from som.vmobjects.block_bc import BcBlock
 from som.vmobjects.double import Double
@@ -83,6 +84,14 @@ class Stack(object):
             s += str(w_v) + ","
         s += "]"
         print s, self.stack_ptr
+
+
+@dont_look_inside
+def _invoke_1_prim(invokable, rcvr, stack, dummy=False):
+    if dummy:
+        return stack.top()
+    return invokable.invoke_1(rcvr)
+
 
 @dont_look_inside
 def _halt(current_bc_idx, next_bc_idx,  method, frame, stack, dummy=False):
@@ -435,6 +444,7 @@ def _create_frame(invokable, frame, stack):
 @enable_shallow_tracing_argn(1)
 def _send_1(current_bc_idx, next_bc_idx,  method, frame, stack):
     from som.vmobjects.method_bc import BcMethod
+    from som.vmobjects.primitive import UnaryPrimitive
     from som.vm.current import current_universe
     from som.statistics import statistics
 
@@ -448,6 +458,9 @@ def _send_1(current_bc_idx, next_bc_idx,  method, frame, stack):
         if isinstance(invokable, BcMethod):
             rcvr_type = receiver.get_class(current_universe)
             method.set_receiver_type(current_bc_idx, rcvr_type)
+        elif isinstance(invokable, UnaryPrimitive):
+            rcvr_type = receiver.get_class(current_universe)
+            method.set_receiver_type_primitive(current_bc_idx, rcvr_type)
 
     if not we_are_translated():
         statistics.incr_with_idx(invokable, 1)
@@ -991,17 +1004,27 @@ def interpret_tier1(
             _pop_field_1(current_bc_idx, next_bc_idx, method, frame, stack)
 
         elif bytecode == Bytecodes.send_1:
+            from som.vmobjects.primitive import UnaryPrimitive
             if we_are_jitted():
-                rcvr_type = method.get_receiver_type(current_bc_idx)
-                if rcvr_type is None:
-                    next_bc_idx = _send_1(
-                        current_bc_idx,
-                        next_bc_idx,
-                        method,
-                        frame,
-                        stack,
-                    )
-                else:
+                if method.has_receiver_type_primitive(current_bc_idx):
+                    rcvr_type = method.get_receiver_type_primitive(current_bc_idx)
+                    rcvr = stack.take(0, dummy=True)
+                    if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
+                        invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
+                        assert isinstance(invokable, UnaryPrimitive)
+                        prim_fn = invokable.get_prim_fn()
+                        result = prim_fn(rcvr)
+                        stack.insert(0, result, dummy=True)
+                        jit.begin_slow_path()
+                        next_bc_idx = _send_1(
+                            current_bc_idx,
+                            next_bc_idx,
+                            method,
+                            frame,
+                            stack,
+                        )
+                        jit.end_slow_path()
+                elif method.has_receiver_type(current_bc_idx):
                     # Polymorphic inline chache optimization for send instruction
                     #
                     #   if emit_ptr_eq(rcvr, rcvr_type) <- guard to check rcvr type
@@ -1018,6 +1041,7 @@ def interpret_tier1(
                     #   r1 = call_assembler(frame, stack)                /
                     #   stack.push(r1).                                 /
                     #   ... <---------------- (merge) -----------------/
+                    rcvr_type = method.get_receiver_type(current_bc_idx)
                     rcvr = stack.take(0, dummy=True)
                     # guard to check the type of rcvr equals to rcvr_type
                     if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
@@ -1046,6 +1070,14 @@ def interpret_tier1(
                             stack,
                         )
                         jit.end_slow_path()
+                else:
+                    next_bc_idx = _send_1(
+                        current_bc_idx,
+                        next_bc_idx,
+                        method,
+                        frame,
+                        stack,
+                    )
             else:
                 next_bc_idx = _send_1(
                     current_bc_idx,
