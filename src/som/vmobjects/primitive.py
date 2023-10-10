@@ -90,6 +90,10 @@ class UnaryPrimitive(_AbstractPrimitive):
         prim_fn = self._prim_fn
         return prim_fn(rcvr)
 
+    def invoke_1_tj(self, rcvr, ctx=None):
+        prim_fn = self._prim_fn
+        return prim_fn(rcvr)
+
     def invoke_1_tier2(self, rcvr, ctx=None):
         prim_fn = self._prim_fn
         return prim_fn(rcvr)

@@ -3,7 +3,7 @@ from rlib import jit
 from som.primitives.primitives import Primitives
 from som.vm.globals import nilObject, trueObject, falseObject
 from som.vmobjects.primitive import Primitive, BinaryPrimitive
-
+from som.tier_type import is_tier1
 
 def _restart(ivkbl, rcvr, args):
     raise RuntimeError(
@@ -44,7 +44,10 @@ def _while_loop(loop_condition, loop_body, while_type):
             method_condition=method_condition,
             while_type=while_type,
         )
-        condition_result = method_condition.invoke_1(loop_condition)
+        if is_tier1():
+            condition_result = method_condition.invoke_1_tj(loop_condition)
+        else:
+            condition_result = method_condition.invoke_1_tier2(loop_condition)
         if condition_result is while_type:
             method_body.invoke_1(loop_body)
         else:

@@ -47,6 +47,7 @@ def interpret(method, frame, max_stack_size, dummy=False):
     Movement from interpreter to interpreter is implemented using exceptions.
     """
     from som.interpreter.bc.interpreter_tier1 import interpret_tier1
+    from som.interpreter.bc.interpreter_tier1_tracing import interpret_tier1_tj
     from som.interpreter.bc.interpreter_tier2 import interpret_tier2
 
     if dummy:
@@ -62,7 +63,7 @@ def interpret(method, frame, max_stack_size, dummy=False):
         current_bc_idx = 0
         while True:
             try:
-                w_result = interpret_tier1(
+                w_result = interpret_tier1_tj(
                     method, frame, max_stack_size, current_bc_idx
                 )
                 return w_result

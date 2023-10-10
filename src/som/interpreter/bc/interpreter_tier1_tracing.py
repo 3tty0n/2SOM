@@ -16,10 +16,12 @@ from som.interpreter.bc.frame import (
     get_self_dynamically,
 )
 from som.interpreter.bc.traverse_stack import t_empty, t_dump, t_push
-from som.interpreter.bc.hints import enable_shallow_tracing, enable_shallow_tracing_argn, enable_shallow_tracing_with_value
+from som.interpreter.bc.hints import enable_shallow_tracing, enable_shallow_tracing_argn, \
+    enable_shallow_tracing_with_value
 from som.interpreter.bc.tier_shifting import TRACE_THRESHOLD, ContinueInTier1, ContinueInTier2
 from som.interpreter.control_flow import ReturnException
-from som.interpreter.send import lookup_and_send_2, lookup_and_send_3, lookup_and_send_2_tier2, lookup_and_send_3_tier2
+from som.interpreter.send import lookup_and_send_2, lookup_and_send_3, lookup_and_send_2_tier2, \
+    lookup_and_send_3_tier2, lookup_and_send_2_tj, lookup_and_send_3_tj
 from som.tier_type import is_hybrid, is_tier1, is_tier2, tier_manager
 from som.vm.globals import nilObject, trueObject, falseObject
 from som.vmobjects.array import Array
@@ -351,7 +353,7 @@ def _pop_field_1(current_bc_idx, next_bc_idx,  method, frame, stack):
 def _interpret_naive(
     frame, stack, current_bc_idx, entry_bc_idx, method, tstack, dummy=False
 ):
-    return interpret_tier1(method, frame, 8, dummy)
+    return interpret_tier1_tj(method, frame, 8, dummy)
 
 
 @jit.dont_look_inside
@@ -360,14 +362,14 @@ def _interpret_CALL_ASSEMBLER(
 ):
     # if dummy:
     #     return
-    return interpret_tier1(method, frame, 8, dummy=dummy)
+    return interpret_tier1_tj(method, frame, 8, dummy=dummy)
 
 
 @enable_shallow_tracing
 def _interpret_nlr_CALL_ASSEMBLER(
     frame, stack, current_bc_idx, entry_bc_idx, invokable, tstack, dummy=False
 ):
-    return _interp_with_nlr(invokable, frame, 8, dummy)
+    return _interp_with_nlr_tj(invokable, frame, 8, dummy)
 
 
 @enable_shallow_tracing_argn(1)
@@ -453,7 +455,7 @@ def _send_1(current_bc_idx, next_bc_idx,  method, frame, stack):
         statistics.incr_with_idx(invokable, 1)
 
     if invokable is not None:
-        stack.insert(0, invokable.invoke_1(receiver))
+        stack.insert(0, invokable.invoke_1_tj(receiver))
     elif not layout.is_latest:
         _update_object_and_invalidate_old_caches(
             receiver, method, current_bc_idx, current_universe
@@ -491,7 +493,7 @@ def _send_2(current_bc_idx, next_bc_idx,  method, frame, stack):
 
     if invokable is not None:
         arg = stack.pop()
-        stack.insert(0, invokable.invoke_2(receiver, arg))
+        stack.insert(0, invokable.invoke_2_tj(receiver, arg))
     elif not layout.is_latest:
         _update_object_and_invalidate_old_caches(
             receiver, method, current_bc_idx, current_universe
@@ -525,7 +527,7 @@ def _send_3(current_bc_idx, next_bc_idx,  method, frame, stack):
     if invokable is not None:
         arg2 = stack.pop()
         arg1 = stack.pop()
-        stack.insert(0, invokable.invoke_3(receiver, arg1, arg2))
+        stack.insert(0, invokable.invoke_3_tj(receiver, arg1, arg2))
     elif not layout.is_latest:
         _update_object_and_invalidate_old_caches(
             receiver, method, current_bc_idx, current_universe
@@ -560,7 +562,7 @@ def _send_4(current_bc_idx, next_bc_idx,  method, frame, stack):
         arg3 = stack.pop()
         arg2 = stack.pop()
         arg1 = stack.pop()
-        result = invokable.invoke_4(receiver, arg1, arg2, arg3)
+        result = invokable.invoke_4_tj(receiver, arg1, arg2, arg3)
         stack.insert(0, result)
     elif not layout.is_latest:
         _update_object_and_invalidate_old_caches(
@@ -596,7 +598,7 @@ def _send_n(current_bc_idx, next_bc_idx, method, frame, stack):
         statistics.incr_with_idx(invokable, 10)
 
     if invokable is not None:
-        stack.stack_ptr = invokable.invoke_n(stack.items, stack.stack_ptr)
+        stack.stack_ptr = invokable.invoke_n_tj(stack.items, stack.stack_ptr)
     elif not layout.is_latest:
         _update_object_and_invalidate_old_caches(
             receiver, method, current_bc_idx, current_universe
@@ -808,11 +810,11 @@ def emit_ptr_eq(rcvr, rcvr_type, dummy=False):
 
 
 @jit.dont_look_inside
-def _interp_with_nlr(method, new_frame, max_stack_size, dummy=False):
+def _interp_with_nlr_tj(method, new_frame, max_stack_size, dummy=False):
     inner = get_inner_as_context(new_frame)
 
     try:
-        result = interpret(method, new_frame, max_stack_size, dummy)
+        result = interpret_tier1_tj(method, new_frame, max_stack_size, dummy)
         mark_as_no_longer_on_stack(inner)
         return result
     except ReturnException as e:
@@ -828,7 +830,7 @@ def _lookup_invokable(receiver_type, current_bc_idx, method):
 
 
 @jit.unroll_safe
-def interpret_tier1(
+def interpret_tier1_tj(
     method, frame, max_stack_size, current_bc_idx=0, stack=None, dummy=False
 ):
     from som.vm.current import current_universe
@@ -840,27 +842,13 @@ def interpret_tier1(
     if not stack:
         stack = Stack(max_stack_size)
 
-    tstack = t_empty()
-    entry_bc_idx = 0
-
-    tier1jitdriver.can_enter_jit(
-        current_bc_idx=current_bc_idx,
-        entry_bc_idx=entry_bc_idx,
-        method=method,
-        frame=frame,
-        stack=stack,
-        tstack=tstack,
-    )
-
     while True:
 
-        tier1jitdriver.jit_merge_point(
+        tier1_tj_jitdriver.jit_merge_point(
             current_bc_idx=current_bc_idx,
-            entry_bc_idx=entry_bc_idx,
             method=method,
             frame=frame,
             stack=stack,
-            tstack=tstack,
         )
 
         bytecode = method.get_bytecode(current_bc_idx)
@@ -873,7 +861,7 @@ def interpret_tier1(
 
         # promote(stack_ptr)
 
-        # print(get_printable_location_tier1(current_bc_idx, entry_bc_idx, method, tstack))
+        # print get_printable_location_tier1(current_bc_idx, entry_bc_idx, method, tstack)
 
         # Handle the current bytecode
         if bytecode == Bytecodes.halt:
@@ -1209,8 +1197,8 @@ def interpret_tier1(
             #         )
             #     else:
             #         signature = method.get_constant(current_bc_idx)
-            #         num_args = signature.get_number_of_signature_arguments()
-            #         rcvr = stack.take(num_args - 1, dummy=True)
+            #         signature_num_args = signature.get_number_of_signature_arguments()
+            #         rcvr = stack.take(signature_num_args - 1, dummy=True)
             #         if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
             #             invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
             #             new_frame = _create_frame(invokable, frame, stack)
@@ -1224,6 +1212,7 @@ def interpret_tier1(
             #                 tstack=t_empty(),
             #                 dummy=True,
             #             )
+            #             num_args = invokable.get_number_of_arguments()
             #             stack = stack_pop_old_arguments_and_push_result_dli(
             #                 stack, num_args, result, dummy=True)
             #             # ---------------------------------------------------------------
@@ -1252,82 +1241,16 @@ def interpret_tier1(
             _do_super_send(current_bc_idx, next_bc_idx,  method, frame, stack)
 
         elif bytecode == Bytecodes.return_local:
-            if we_are_jitted():
-                if tstack.t_is_empty():
-                    ret_object = _return_local(current_bc_idx, next_bc_idx,  method, frame, stack)
-                    # next_bc_idx = emit_ret(entry_bc_idx, ret_object)
-                    jit.emit_ret(ret_object)
-                    next_bc_idx = entry_bc_idx # HACK: close this loop
-                    tier1jitdriver.can_enter_jit(
-                        current_bc_idx=current_bc_idx,
-                        entry_bc_idx=entry_bc_idx,
-                        method=method,
-                        frame=frame,
-                        stack=stack,
-                        tstack=tstack,
-                    )
-                else:
-                    ret_object = _return_local(current_bc_idx, next_bc_idx,  method, frame, stack)
-                    next_bc_idx, tstack = tstack.t_pop()
-                    # next_bc_idx = emit_ret(next_bc_idx, ret_object)
-                    jit.emit_ret(ret_object)
-            else:
-                return _return_local(current_bc_idx, next_bc_idx,  method, frame, stack)
+            return _return_local(current_bc_idx, next_bc_idx,  method, frame, stack)
 
         elif bytecode == Bytecodes.return_non_local:
-            if we_are_jitted():
-                if tstack.t_is_empty():
-                    val = stack.top()
-                    ret_object = _do_return_non_local(
-                        val, frame, method.get_bytecode(current_bc_idx + 1)
-                    )
-                    # next_bc_idx = emit_ret(entry_bc_idx, ret_object)
-                    jit.emit_ret(ret_object)
-                    next_bc_idx = entry_bc_idx # HACK: close this loop
-                    tier1jitdriver.can_enter_jit(
-                        current_bc_idx=current_bc_idx,
-                        entry_bc_idx=entry_bc_idx,
-                        method=method,
-                        frame=frame,
-                        stack=stack,
-                        tstack=tstack,
-                    )
-                else:
-                    val = stack.top()
-                    ret_object = _do_return_non_local(
-                        val, frame, method.get_bytecode(current_bc_idx + 1)
-                    )
-                    next_bc_idx, tstack = tstack.t_pop()
-                    # next_bc_idx = emit_ret(next_bc_idx, ret_object)
-                    jit.emit_ret(ret_object)
-            else:
-                val = stack.top()
-                return _do_return_non_local(
-                    val, frame, method.get_bytecode(current_bc_idx + 1)
-                )
+            val = stack.top()
+            return _do_return_non_local(
+                val, frame, method.get_bytecode(current_bc_idx + 1)
+            )
 
         elif bytecode == Bytecodes.return_self:
-            if we_are_jitted():
-                if tstack.t_is_empty():
-                    ret_object = _return_self(current_bc_idx, next_bc_idx,  method, frame, stack)
-                    # next_bc_idx = emit_ret(entry_bc_idx, ret_object)
-                    jit.emit_ret(ret_object)
-                    next_bc_idx = entry_bc_idx # HACK: close this loop
-                    tier1jitdriver.can_enter_jit(
-                        current_bc_idx=current_bc_idx,
-                        entry_bc_idx=entry_bc_idx,
-                        method=method,
-                        frame=frame,
-                        stack=stack,
-                        tstack=tstack,
-                    )
-                else:
-                    ret_object = _return_self(current_bc_idx, next_bc_idx,  method, frame, stack)
-                    next_bc_idx, tstack = tstack.t_pop()
-                    # next_bc_idx = emit_ret(next_bc_idx, ret_object)
-                    jit.emit_ret(ret_object)
-            else:
-                return _return_self(current_bc_idx, next_bc_idx,  method, frame, stack)
+            return _return_self(current_bc_idx, next_bc_idx,  method, frame, stack)
 
         elif bytecode == Bytecodes.inc:
             _inc(current_bc_idx, next_bc_idx,  method, frame, stack)
@@ -1340,96 +1263,40 @@ def interpret_tier1(
 
         elif bytecode == Bytecodes.jump_on_true_top_nil:
             target_bc_idx = current_bc_idx + method.get_bytecode(current_bc_idx + 1)
-            if we_are_jitted():
-                if _is_true_object(current_bc_idx, next_bc_idx,  method, frame, stack, dummy=True):
-                    stack.push(nilObject)
-                    tstack = t_push(next_bc_idx, tstack)
-                    next_bc_idx = target_bc_idx
-                else:
-                    tstack = t_push(target_bc_idx, tstack)
-            else:
-                if _is_true_object(current_bc_idx, next_bc_idx,  method, frame, stack):
-                    next_bc_idx = target_bc_idx
-                    stack.push(nilObject)
+            if _is_true_object(current_bc_idx, next_bc_idx,  method, frame, stack):
+                next_bc_idx = target_bc_idx
+                stack.push(nilObject)
 
         elif bytecode == Bytecodes.jump_on_false_top_nil:
             target_bc_idx = current_bc_idx + method.get_bytecode(current_bc_idx + 1)
-            if we_are_jitted():
-                if _is_false_object(current_bc_idx, next_bc_idx,  method, frame, stack, dummy=True):
-                    stack.push(nilObject)
-                    tstack = t_push(next_bc_idx, tstack)
-                    next_bc_idx = target_bc_idx
-                else:
-                    tstack = t_push(target_bc_idx, tstack)
-            else:
-                if _is_false_object(current_bc_idx, next_bc_idx,  method, frame, stack):
-                    next_bc_idx = target_bc_idx
-                    stack.push(nilObject)
+            if _is_false_object(current_bc_idx, next_bc_idx,  method, frame, stack):
+                next_bc_idx = target_bc_idx
+                stack.push(nilObject)
 
         elif bytecode == Bytecodes.jump_on_true_pop:
             target_bc_idx = current_bc_idx + method.get_bytecode(current_bc_idx + 1)
-            if we_are_jitted():
-                if _is_true_object(current_bc_idx, next_bc_idx,  method, frame, stack, dummy=True):
-                    tstack = t_push(next_bc_idx, tstack)
-                    next_bc_idx = target_bc_idx
-                else:
-                    tstack = t_push(target_bc_idx, tstack)
-            else:
-                if _is_true_object(current_bc_idx, next_bc_idx,  method, frame, stack):
-                    next_bc_idx = target_bc_idx
+            if _is_true_object(current_bc_idx, next_bc_idx,  method, frame, stack):
+                next_bc_idx = target_bc_idx
 
         elif bytecode == Bytecodes.jump_on_false_pop:
             target_bc_idx = current_bc_idx + method.get_bytecode(current_bc_idx + 1)
-            if we_are_jitted():
-                if _is_false_object(current_bc_idx, next_bc_idx,  method, frame, stack, dummy=True):
-                    tstack = t_push(next_bc_idx, tstack)
-                    next_bc_idx = target_bc_idx
-                else:
-                    tstack = t_push(target_bc_idx, tstack)
-            else:
-                if _is_false_object(current_bc_idx, next_bc_idx,  method, frame, stack):
-                    next_bc_idx = target_bc_idx
+            if _is_false_object(current_bc_idx, next_bc_idx,  method, frame, stack):
+                next_bc_idx = target_bc_idx
 
         elif bytecode == Bytecodes.jump_backward:
             target_bc_idx = current_bc_idx - method.get_bytecode(current_bc_idx + 1)
-
-            if is_hybrid():
-                if method._counts[current_bc_idx] > TRACE_THRESHOLD and tstack.t_is_empty():
-                    raise ContinueInTier2(method, frame, stack, current_bc_idx)
-                method.incr_count(current_bc_idx)
-
-            if we_are_jitted():
-                if tstack.t_is_empty():
-                    # next_bc_idx = emit_jump(entry_bc_idx, target_bc_idx)
-                    jit.emit_jump(target_bc_idx)
-                    next_bc_idx = entry_bc_idx
-                    tier1jitdriver.can_enter_jit(
-                        current_bc_idx=target_bc_idx,
-                        entry_bc_idx=entry_bc_idx,
-                        method=method,
-                        frame=frame,
-                        stack=stack,
-                        tstack=tstack,
-                    )
-                else:
-                    next_bc_idx, tstack = tstack.t_pop()
-                    # next_bc_idx = emit_jump(next_bc_idx, target_bc_idx)
-                    jit.emit_jump(target_bc_idx)
-            else:
-                next_bc_idx = entry_bc_idx = target_bc_idx
+            next_bc_idx = target_bc_idx
+            tier1_tj_jitdriver.can_enter_jit(
+                current_bc_idx=current_bc_idx,
+                method=method,
+                frame=frame,
+                stack=stack,
+            )
 
         elif bytecode == Bytecodes.jump_if_greater:
             target_bc_idx = current_bc_idx + method.get_bytecode(current_bc_idx + 1)
-
-            if we_are_jitted():
-                if _is_greater_two(current_bc_idx, next_bc_idx,  method, frame, stack, dummy=True):
-                    tstack = t_push(next_bc_idx, tstack)
-                    next_bc_idx = target_bc_idx
-                else:
-                    tstack = t_push(target_bc_idx, tstack)
-            else:
-                if _is_greater_two(current_bc_idx, next_bc_idx,  method, frame, stack):
-                    next_bc_idx = target_bc_idx
+            if _is_greater_two(current_bc_idx, next_bc_idx,  method, frame, stack):
+                next_bc_idx = target_bc_idx
 
         elif bytecode == Bytecodes.jump2:
             target_bc_idx = (
@@ -1437,7 +1304,6 @@ def interpret_tier1(
                 + method.get_bytecode(current_bc_idx + 1)
                 + (method.get_bytecode(current_bc_idx + 2) << 8)
             )
-            tstack = t_push(next_bc_idx, tstack)
             next_bc_idx = target_bc_idx
 
         elif bytecode == Bytecodes.jump2_on_true_top_nil:
@@ -1446,17 +1312,9 @@ def interpret_tier1(
                 + method.get_bytecode(current_bc_idx + 1)
                 + (method.get_bytecode(current_bc_idx + 2) << 8)
             )
-            if we_are_jitted():
-                if _is_true_object(current_bc_idx, next_bc_idx,  method, frame, stack, dummy=True):
-                    stack.push(nilObject)
-                    tstack = t_push(next_bc_idx, tstack)
-                    next_bc_idx = target_bc_idx
-                else:
-                    tstack = t_push(target_bc_idx, tstack)
-            else:
-                if _is_true_object(current_bc_idx, next_bc_idx,  method, frame, stack):
-                    next_bc_idx = target_bc_idx
-                    stack.push(nilObject)
+            if _is_true_object(current_bc_idx, next_bc_idx,  method, frame, stack):
+                next_bc_idx = target_bc_idx
+                stack.push(nilObject)
 
         elif bytecode == Bytecodes.jump2_on_false_top_nil:
             target_bc_idx = (
@@ -1464,17 +1322,9 @@ def interpret_tier1(
                 + method.get_bytecode(current_bc_idx + 1)
                 + (method.get_bytecode(current_bc_idx + 2) << 8)
             )
-            if we_are_jitted():
-                if _is_false_object(current_bc_idx, next_bc_idx,  method, frame, stack, dummy=True):
-                    stack.push(nilObject)
-                    tstack = t_push(next_bc_idx, tstack)
-                    next_bc_idx = target_bc_idx
-                else:
-                    tstack = t_push(target_bc_idx, tstack)
-            else:
-                if _is_false_object(current_bc_idx, next_bc_idx,  method, frame, stack):
-                    next_bc_idx = target_bc_idx
-                    stack.push(nilObject)
+            if _is_false_object(current_bc_idx, next_bc_idx,  method, frame, stack):
+                next_bc_idx = target_bc_idx
+                stack.push(nilObject)
 
         elif bytecode == Bytecodes.jump2_on_true_pop:
             target_bc_idx = (
@@ -1482,15 +1332,8 @@ def interpret_tier1(
                 + method.get_bytecode(current_bc_idx + 1)
                 + (method.get_bytecode(current_bc_idx + 2) << 8)
             )
-            if we_are_jitted():
-                if _is_true_object(current_bc_idx, next_bc_idx,  method, frame, stack, dummy=True):
-                    tstack = t_push(next_bc_idx, tstack)
-                    next_bc_idx = target_bc_idx
-                else:
-                    tstack = t_push(target_bc_idx, tstack)
-            else:
-                if _is_true_object(current_bc_idx, next_bc_idx,  method, frame, stack):
-                    next_bc_idx = target_bc_idx
+            if _is_true_object(current_bc_idx, next_bc_idx,  method, frame, stack):
+                next_bc_idx = target_bc_idx
 
         elif bytecode == Bytecodes.jump2_on_false_pop:
             target_bc_idx = (
@@ -1498,15 +1341,8 @@ def interpret_tier1(
                 + method.get_bytecode(current_bc_idx + 1)
                 + (method.get_bytecode(current_bc_idx + 2) << 8)
             )
-            if we_are_jitted():
-                if _is_false_object(current_bc_idx, next_bc_idx,  method, frame, stack, dummy=True):
-                    tstack = t_push(next_bc_idx, tstack)
-                    next_bc_idx = target_bc_idx
-                else:
-                    tstack = t_push(target_bc_idx, tstack)
-            else:
-                if _is_false_object(current_bc_idx, next_bc_idx,  method, frame, stack):
-                    next_bc_idx = target_bc_idx
+            if _is_false_object(current_bc_idx, next_bc_idx,  method, frame, stack):
+                next_bc_idx = target_bc_idx
 
         elif bytecode == Bytecodes.jump2_if_greater:
             target_bc_idx = (
@@ -1514,15 +1350,8 @@ def interpret_tier1(
                 + method.get_bytecode(current_bc_idx + 1)
                 + (method.get_bytecode(current_bc_idx + 2) << 8)
             )
-            if we_are_jitted():
-                if _is_greater_two(current_bc_idx, next_bc_idx,  method, frame, stack, dummy=True):
-                    tstack = t_push(next_bc_idx, tstack)
-                    next_bc_idx = target_bc_idx
-                else:
-                    tstack = t_push(target_bc_idx, tstack)
-            else:
-                if _is_greater_two(current_bc_idx, next_bc_idx,  method, frame, stack):
-                    next_bc_idx = target_bc_idx
+            if _is_greater_two(current_bc_idx, next_bc_idx,  method, frame, stack):
+                next_bc_idx = target_bc_idx
 
         elif bytecode == Bytecodes.jump2_backward:
             # TODO: instrument with tstack
@@ -1530,31 +1359,13 @@ def interpret_tier1(
                 method.get_bytecode(current_bc_idx + 1)
                 + (method.get_bytecode(current_bc_idx + 2) << 8)
             )
-
-            if is_hybrid():
-                if method._counts[current_bc_idx] > TRACE_THRESHOLD and tstack.t_is_empty():
-                    raise ContinueInTier2(method, frame, stack, current_bc_idx)
-                method.incr_count(current_bc_idx)
-
-            if we_are_jitted():
-                if tstack.t_is_empty():
-                    # next_bc_idx = emit_jump(entry_bc_idx, target_bc_idx)
-                    jit.emit_jump(target_bc_idx)
-                    next_bc_idx = entry_bc_idx
-                    tier1jitdriver.can_enter_jit(
-                        current_bc_idx=target_bc_idx,
-                        entry_bc_idx=entry_bc_idx,
-                        method=method,
-                        frame=frame,
-                        stack=stack,
-                        tstack=tstack,
-                    )
-                else:
-                    next_bc_idx, tstack = tstack.t_pop()
-                    # next_bc_idx = emit_jump(next_bc_idx, target_bc_idx)
-                    jit.emit_jump(target_bc_idx)
-            else:
-                next_bc_idx = entry_bc_idx = target_bc_idx
+            next_bc_idx = target_bc_idx
+            tier1_tj_jitdriver.can_enter_jit(
+                current_bc_idx=current_bc_idx,
+                method=method,
+                frame=frame,
+                stack=stack,
+            )
 
         elif bytecode == Bytecodes.q_super_send_1:
             _q_super_send_1(current_bc_idx, next_bc_idx,  method, frame, stack)
@@ -1711,27 +1522,27 @@ def _do_return_non_local(result, frame, ctx_level):
         # That is the most outer self object, not the blockSelf.
         self_block = read_frame(frame, FRAME_AND_INNER_RCVR_IDX)
         outer_self = get_self_dynamically(frame)
-        return lookup_and_send_2(outer_self, self_block, "escapedBlock:")
+        return lookup_and_send_2_tj(outer_self, self_block, "escapedBlock:")
 
     raise ReturnException(result, block.get_on_stack_marker())
 
 
 def _invoke_invokable_slow_path(invokable, num_args, receiver, stack):
     if num_args == 1:
-        stack.insert(0, invokable.invoke_1(receiver))
+        stack.insert(0, invokable.invoke_1_tj(receiver))
 
     elif num_args == 2:
         arg = stack.pop()
-        stack.insert(0, invokable.invoke_2(receiver, arg))
+        stack.insert(0, invokable.invoke_2_tj(receiver, arg))
 
     elif num_args == 3:
         arg2 = stack.pop()
         arg1 = stack.pop()
 
-        stack.insert(0, invokable.invoke_3(receiver, arg1, arg2))
+        stack.insert(0, invokable.invoke_3_tj(receiver, arg1, arg2))
 
     else:
-        stack.stack_ptr = invokable.invoke_n(stack.items, stack.stack_ptr)
+        stack.stack_ptr = invokable.invoke_n_tj(stack.items, stack.stack_ptr)
 
 
 
@@ -1755,7 +1566,7 @@ def _send_does_not_understand(receiver, selector, stack):
 
     stack.insert(
         0,
-        lookup_and_send_3(
+        lookup_and_send_3_tj(
             receiver, selector, arguments_array, "doesNotUnderstand:arguments:"
         ),
     )
@@ -1765,26 +1576,27 @@ def _send_does_not_understand(receiver, selector, stack):
 def _get_inline_cache_invokable(method, bytecode_index):
     return method.get_inline_cache_invokable(bytecode_index)
 
-def get_printable_location_tier1(bytecode_index, entry_bc_idx, method, tstack):
+
+def get_printable_location_tier1_tj(bytecode_index, method):
     from som.vmobjects.method_bc import BcAbstractMethod
 
     assert isinstance(method, BcAbstractMethod)
     bc = method.get_bytecode(bytecode_index)
-    return "%s @ %d in %s tstack %s" % (
+    return "%s @ %d" % (
         bytecode_as_str(bc),
         bytecode_index,
         method.merge_point_string(),
-        t_dump(tstack),
     )
 
 
 
-tier1jitdriver = jit.JitDriver(
+tier1_tj_jitdriver = jit.JitDriver(
     name="Threadedcode Interpreter",
-    greens=["current_bc_idx", "entry_bc_idx", "method", "tstack"],
+    greens=["current_bc_idx", "method",],
     reds=["frame", "stack"],
-    get_printable_location=get_printable_location_tier1,
-    should_unroll_one_iteration=lambda current_bc_idx, entry_bc_idx, method, tstack: True,
+    get_printable_location=get_printable_location_tier1_tj,
+    should_unroll_one_iteration=lambda current_bc_idx, method: True,
+    is_recursive=True,
     threaded_code_gen=True,
     conditions=["_is_true_object", "_is_false_object", "_is_greater_two"],
 )

@@ -7,7 +7,7 @@ from som.compiler.bc.bytecode_generator import (
 from som.interp_type import is_ast_interpreter
 from som.interpreter.ast.frame import FRAME_AND_INNER_RCVR_IDX
 from som.interpreter.bc.frame import stack_pop_old_arguments_and_push_result
-from som.interpreter.send import lookup_and_send_2, lookup_and_send_2_tier2
+from som.interpreter.send import lookup_and_send_2, lookup_and_send_2_tier2, lookup_and_send_2_tj
 
 from som.vmobjects.method import AbstractMethod
 
@@ -52,6 +52,9 @@ class LiteralReturn(AbstractTrivialMethod):
             self._value.set_holder(value)
 
     def invoke_1(self, _rcvr, ctx=None):
+        return self._value
+
+    def invoke_1_tj(self, _rcvr, ctx=None):
         return self._value
 
     def invoke_1_tier2(self, _rcvr, ctx=None):
@@ -124,6 +127,20 @@ class GlobalRead(AbstractTrivialMethod):
             return self._assoc.value
 
         return lookup_and_send_2(
+            determine_outer_self(rcvr, self._context_level),
+            self._global_name,
+            "unknownGlobal:",
+        )
+
+    def invoke_1_tj(self, rcvr, ctx=None):
+        if self._assoc is not None:
+            return self._assoc.value
+
+        if self.universe.has_global(self._global_name):
+            self._assoc = self.universe.get_globals_association(self._global_name)
+            return self._assoc.value
+
+        return lookup_and_send_2_tj(
             determine_outer_self(rcvr, self._context_level),
             self._global_name,
             "unknownGlobal:",
@@ -208,6 +225,13 @@ class FieldRead(AbstractTrivialMethod):
         outer_self = determine_outer_self(rcvr, self._context_level)
         return outer_self.get_field(self._field_idx)
 
+    def invoke_1_tj(self, rcvr, ctx=None):
+        if self._context_level == 0:
+            return rcvr.get_field(self._field_idx)
+
+        outer_self = determine_outer_self(rcvr, self._context_level)
+        return outer_self.get_field(self._field_idx)
+
     def invoke_1_tier2(self, rcvr, ctx=None):
         if self._context_level == 0:
             return rcvr.get_field(self._field_idx)
@@ -274,6 +298,11 @@ class FieldWrite(AbstractTrivialMethod):
         self._arg_idx = arg_idx
 
     def invoke_1(self, _rcvr, ctx=None):
+        raise NotImplementedError(
+            "Not supported, should never be called. We need an argument"
+        )
+
+    def invoke_1_tj(self, _rcvr, ctx=None):
         raise NotImplementedError(
             "Not supported, should never be called. We need an argument"
         )
