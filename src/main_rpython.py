@@ -76,7 +76,21 @@ def get_gchooks():
 # __________  Entry points  __________
 
 
+def report_gc_stats():
+    minors = GC_HOOKS_STATS.minors
+    steps = GC_HOOKS_STATS.steps
+    collects = GC_HOOKS_STATS.collects
+    duration = GC_HOOKS_STATS.duration
+    print 'GC hooks statistics'
+    print '    gc-minor:        ', minors
+    print '    gc-collect-step: ', steps
+    print '    gc-collect:      ', collects
+    print '    gc-duration: %f us' % (duration * 1000)
+
+
 def entry_point(argv):
+    is_gc_stats = False
+
     i = 0
     while True:
         if not i < len(argv):
@@ -95,6 +109,9 @@ def entry_point(argv):
             tier_manager.set_threshold(int(jitvalue))
             del argv[i : i + 2]
             continue
+        elif argv[i] == '--gc-stats':
+            is_gc_stats = True
+            del argv[i : i + 1]
         i += 1
 
     try:
@@ -109,15 +126,8 @@ def entry_point(argv):
         os.write(2, "ERROR: %s thrown during execution.\n" % ex)
         return 1
     finally:
-        minors = GC_HOOKS_STATS.minors
-        steps = GC_HOOKS_STATS.steps
-        collects = GC_HOOKS_STATS.collects
-        duration = GC_HOOKS_STATS.duration
-        print 'GC hooks statistics'
-        print '    gc-minor:        ', minors
-        print '    gc-collect-step: ', steps
-        print '    gc-collect:      ', collects
-        print '    gc-duration: %f us' % (duration * 1000)
+        if is_gc_stats:
+            report_gc_stats()
 
     return 1
 
