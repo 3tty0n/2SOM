@@ -111,7 +111,7 @@ def entry_point(argv):
             continue
         elif argv[i] == '--gc-stats':
             is_gc_stats = True
-            del argv[i : i + 1]
+            del argv[i]
         i += 1
 
     try:
