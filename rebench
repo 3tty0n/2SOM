@@ -1,6 +1,0 @@
-#!/bin/sh
-
-#L3_SIZE_VALUE="$(lscpu | grep L3 | awk '{print $3 / 2}')"
-#L3_SIZE="${L3_SIZE_VALUE}"M
-
-PYPY_GC_MAX=2GB PYPY_GC_NURSERY=4M rebench "$@"
