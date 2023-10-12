@@ -27,7 +27,8 @@ class GcHooksStats(object):
     minors = 0
     steps = 0
     collects = 0
-    duration = 0.0
+    duration_major = 0.0
+    duration_minor = 0.0
 
     def reset(self):
         # the NonConstant are needed so that the annotator annotates the
@@ -37,7 +38,8 @@ class GcHooksStats(object):
         self.minors = NonConstant(0)
         self.steps = NonConstant(0)
         self.collects = NonConstant(0)
-        self.duration = NonConstant(0.0)
+        self.duration_major = NonConstant(0.0)
+        self.duration_minor = NonConstant(0.0)
 
 
 class MyHooks(GcHooks):
@@ -56,10 +58,11 @@ class MyHooks(GcHooks):
 
     def on_gc_minor(self, duration, total_memory_used, pinned_objects):
         self.stats.minors += 1
-        self.stats.duration += duration
+        self.stats.duration_minor += duration
 
     def on_gc_collect_step(self, duration, oldstate, newstate):
         self.stats.steps += 1
+        self.stats.duration_major += duration
 
     def on_gc_collect(self, num_major_collects,
                       arenas_count_before, arenas_count_after,
@@ -70,8 +73,10 @@ class MyHooks(GcHooks):
 
 GC_HOOKS_STATS = GcHooksStats()
 
+
 def get_gchooks():
     return MyHooks(GC_HOOKS_STATS)
+
 
 # __________  Entry points  __________
 
@@ -80,12 +85,14 @@ def report_gc_stats():
     minors = GC_HOOKS_STATS.minors
     steps = GC_HOOKS_STATS.steps
     collects = GC_HOOKS_STATS.collects
-    duration = GC_HOOKS_STATS.duration
-    print 'GC hooks statistics'
-    print '    gc-minor:        ', minors
-    print '    gc-collect-step: ', steps
-    print '    gc-collect:      ', collects
-    print '    gc-duration: %f us' % (duration * 1000)
+    duration_minor = GC_HOOKS_STATS.duration_minor
+    duration_major = GC_HOOKS_STATS.duration_major
+    print('GC hooks statistics')
+    print('    gc-minor:          %d' % minors)
+    print('    gc-collect-step:   %d' % steps)
+    print('    gc-collect:        %d' % collects)
+    print('    gc-duration-minor: %f us' % (duration_minor * 100000))
+    print('    gc-duration-major: %f us' % (duration_major * 100000))
 
 
 def entry_point(argv):
