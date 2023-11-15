@@ -841,7 +841,7 @@ def interpret_tier1(
         stack = Stack(max_stack_size)
 
     tstack = t_empty()
-    entry_bc_idx = 0
+    entry_bc_idx = current_bc_idx
 
     tier1jitdriver.can_enter_jit(
         current_bc_idx=current_bc_idx,
