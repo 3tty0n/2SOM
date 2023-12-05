@@ -69,6 +69,13 @@ def _ticks(_rcvr):
     return Integer(int(since_start * 1000000))
 
 
+def _clock_monotonic(_rcvr):
+    from som.vmobjects.integer import Integer
+    from rtime_ext import clock_monotonic
+
+    return Integer(int(clock_monotonic() * 1000000))
+
+
 @jit.dont_look_inside
 def _load_file(_rcvr, file_name):
     try:
@@ -119,6 +126,7 @@ class SystemPrimitivesBase(Primitives):
 
         self._install_instance_primitive(UnaryPrimitive("time", self.universe, _time))
         self._install_instance_primitive(UnaryPrimitive("ticks", self.universe, _ticks))
+        self._install_instance_primitive(UnaryPrimitive("clock_monotonic", self.universe, _clock_monotonic))
         self._install_instance_primitive(
             UnaryPrimitive("fullGC", self.universe, _full_gc)
         )
