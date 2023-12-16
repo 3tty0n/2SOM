@@ -5,6 +5,8 @@ from rlib.streamio import open_file_as_stream, readall_from_stream
 
 from som.primitives.primitives import Primitives
 from som.vm.current import current_universe
+from som.vmobjects.integer import Integer
+from som.vmobjects.double import Double
 from som.vm.globals import nilObject, trueObject, falseObject
 from som.vm.universe import std_print, std_println, error_print, error_println
 from som.vmobjects.primitive import UnaryPrimitive, BinaryPrimitive, TernaryPrimitive
@@ -98,6 +100,36 @@ def _full_gc(_rcvr):
     return trueObject
 
 
+# Krun features
+
+try:
+    from rkrun import rkrun
+
+    def _krun_init(_rcvr):
+        rkrun.krun_init()
+
+    def _krun_done(_rcvr):
+        rkrun.krun_done()
+
+    def _krun_measure(_rcvr, arg):
+        assert isinstance(arg, Integer)
+        rkrun.krun_measure(arg.get_embedded_integer())
+
+    def _krun_get_wall_clock(_rcvr, arg):
+        assert isinstance(arg, Integer)
+        result = rkrun.krun_get_wall_clock(arg.get_embedded_integer())
+        return Double(result)
+
+    def _krun_get_core_cycles_double(_rcvr, arg1, arg2):
+        assert isinstance(arg1, Integer)
+        assert isinstance(arg2, Integer)
+        result = rkrun.krun_get_core_cycles_double(arg1.get_embedded_integer(), arg2.get_embedded_integer())
+        return Double(result)
+
+except ImportError:
+    pass
+
+
 class SystemPrimitivesBase(Primitives):
     def install_primitives(self):
         self._install_instance_primitive(BinaryPrimitive("load:", self.universe, _load))
@@ -126,7 +158,9 @@ class SystemPrimitivesBase(Primitives):
 
         self._install_instance_primitive(UnaryPrimitive("time", self.universe, _time))
         self._install_instance_primitive(UnaryPrimitive("ticks", self.universe, _ticks))
-        self._install_instance_primitive(UnaryPrimitive("clock_monotonic", self.universe, _clock_monotonic))
+        self._install_instance_primitive(
+            UnaryPrimitive("clock_monotonic", self.universe, _clock_monotonic)
+        )
         self._install_instance_primitive(
             UnaryPrimitive("fullGC", self.universe, _full_gc)
         )
@@ -134,3 +168,28 @@ class SystemPrimitivesBase(Primitives):
         self._install_instance_primitive(
             BinaryPrimitive("loadFile:", self.universe, _load_file)
         )
+
+        try:
+            from rkrun import rkrun
+
+            self._install_instance_primitive(
+                UnaryPrimitive("krunInit", self.universe, _krun_init)
+            )
+            self._install_instance_primitive(
+                UnaryPrimitive("krunDone", self.universe, _krun_done)
+            )
+            self._install_instance_primitive(
+                BinaryPrimitive("krunMeasure", self.universe, _krun_measure)
+            )
+            self._install_instance_primitive(
+                BinaryPrimitive("krunGetWallclock", self.universe, _krun_get_wall_clock)
+            )
+            self._install_instance_primitive(
+                TernaryPrimitive(
+                    "krunGetCoreCyclesDouble",
+                    self.universe,
+                    _krun_get_core_cycles_double,
+                )
+            )
+        except ImportError:
+            pass

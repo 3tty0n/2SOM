@@ -27,6 +27,16 @@ Then, you need to type the following command to build the threaded code PySOM:
 
 [1]: https://www.complang.tuwien.ac.at/forth/threaded-code.html
 
+Building Threaded Code Generation
+------------
+
+You need to add [`rtime_ext`](https://github.com/prg-titech/rtime_ext) and [`rkrun`](https://github.com/3tty0n/rkrun) to `PYTHONPATH` build this version of PySOM.
+Both libraries are needed to measure benchmarking data.
+
+```shell
+export PYTHONPATH=/path/to/rtime_ext:/path/to/rkrun:$PYTHONPATH
+```
+
 Benchmarking
 ------------
 
