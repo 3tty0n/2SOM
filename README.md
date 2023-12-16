@@ -40,6 +40,8 @@ export PYTHONPATH=/path/to/rtime_ext:/path/to/rkrun:$PYTHONPATH
 Benchmarking
 ------------
 
+To remove noises, we recommend add `isolcpus=1-3` for example to `GRUB_CMDLINE_LINUX_DEFAULT`.
+
 For benchmarking, the prerequisite is [ReBench][2] and our [SOM][3] repository.
 
 ReBench, which is developed by Dr. Stefan Marr, a benchmarking tool written in Python.
