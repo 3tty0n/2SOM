@@ -451,6 +451,7 @@ def _send_1(current_bc_idx, next_bc_idx,  method, frame, stack):
 
     if not we_are_translated():
         statistics.incr_with_idx(invokable, 1)
+        statistics.record_with_invokable(str(invokable))
 
     if invokable is not None:
         stack.insert(0, invokable.invoke_1(receiver))
@@ -488,6 +489,7 @@ def _send_2(current_bc_idx, next_bc_idx,  method, frame, stack):
 
     if not we_are_translated():
         statistics.incr_with_idx(invokable, 2)
+        statistics.record_with_invokable(str(invokable))
 
     if invokable is not None:
         arg = stack.pop()
@@ -521,6 +523,7 @@ def _send_3(current_bc_idx, next_bc_idx,  method, frame, stack):
 
     if not we_are_translated():
         statistics.incr_with_idx(invokable, 3)
+        statistics.record_with_invokable(str(invokable))
 
     if invokable is not None:
         arg2 = stack.pop()
@@ -555,6 +558,7 @@ def _send_4(current_bc_idx, next_bc_idx,  method, frame, stack):
 
     if not we_are_translated():
         statistics.incr_with_idx(invokable, 10)
+        statistics.record_with_invokable(invokable.merge_point_string())
 
     if invokable is not None:
         arg3 = stack.pop()
@@ -594,6 +598,7 @@ def _send_n(current_bc_idx, next_bc_idx, method, frame, stack):
 
     if not we_are_translated():
         statistics.incr_with_idx(invokable, 10)
+        statistics.record_with_invokable(str(invokable))
 
     if invokable is not None:
         stack.stack_ptr = invokable.invoke_n(stack.items, stack.stack_ptr)

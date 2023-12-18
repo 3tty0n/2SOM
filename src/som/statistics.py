@@ -24,8 +24,7 @@ class _Statistics(object):
     trivial_send_3 = 0
     trivial_send_n = 0
 
-    def _incr_primitive_send(self):
-        self.primitive_send += 1
+    counts = {}
 
     def _incr_primitive_send_with_idx(self, idx):
         if idx == 1:
@@ -39,9 +38,6 @@ class _Statistics(object):
         else:
             raise Exception("incr_with_idx requires idx 1, 2, 3, or 10")
 
-    def _incr_method_send(self):
-        self.method_send += 1
-
     def _incr_method_send_with_idx(self, idx):
         if idx == 1:
             self.method_send_1 += 1
@@ -53,9 +49,6 @@ class _Statistics(object):
             self.method_send_n += 1
         else:
             raise Exception("incr_with_idx requires idx 1, 2, 3, or 10")
-
-    def _incr_trivial_send(self):
-        self.trivial_send += 1
 
     def _incr_trivial_send_with_idx(self, idx):
         if idx == 1:
@@ -70,22 +63,6 @@ class _Statistics(object):
             raise Exception("incr_with_idx requires idx 1, 2, 3, or 10")
 
     @not_in_trace
-    def incr(self, method):
-        from som.vmobjects.method_bc import BcMethod
-        from som.vmobjects.primitive import _AbstractPrimitive
-        from som.vmobjects.method_trivial import AbstractTrivialMethod
-
-        if method is None:
-            return
-        if isinstance(method, BcMethod):
-            self._incr_method_send()
-        elif isinstance(method, _AbstractPrimitive):
-            self._incr_primitive_send()
-        elif isinstance(method, AbstractTrivialMethod):
-            self._incr_trivial_send()
-        else:
-            raise Exception("method %s (type: %s) should be BcMethod, Primitive, or Trivial" % (str(method), type(method)))
-
     def incr_with_idx(self, method, idx):
         # idx
         #   1: send_1
@@ -106,6 +83,27 @@ class _Statistics(object):
             self._incr_trivial_send_with_idx(idx)
         else:
             raise Exception("method %s (type: %s) should be BcMethod, Primitive, or Trivial" % (str(method), type(method)))
+
+
+    @not_in_trace
+    def record_with_invokable(self, signature):
+        if signature not in self.counts:
+            self.counts[signature] = 1
+        else:
+            self.counts[signature] += 1
+
+    @not_in_trace
+    def report_counts(self):
+        from som.vmobjects.symbol import Symbol
+
+        counts = sorted(self.counts, key=self.counts.get, reverse=True)
+
+        debug_print("============== Method invocations =============\n")
+        print("method,count")
+        for signature in counts:
+            # assert isinstance(signature, Symbol)
+            debug_print("%s,%d" % (signature, self.counts[signature]))
+
 
     @not_in_trace
     def report(self):

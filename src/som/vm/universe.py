@@ -534,7 +534,7 @@ def std_println(msg=""):
 
 def main(args):
     from som.tier_type import is_tier1
-    if not is_tier1():
+    if True: # not is_tier1():
         jit.set_param(None, "trace_limit", 15000)
     from som.vm.current import current_universe
     from som.statistics import statistics
@@ -543,7 +543,8 @@ def main(args):
     u.interpret(args[1:])
 
     if not we_are_translated():
-        statistics.report()
+        # statistics.report()
+        statistics.report_counts()
 
     u.exit(0)
 
