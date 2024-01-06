@@ -78,6 +78,9 @@ class _BcPrimitive(_AbstractPrimitive):
     def get_number_of_signature_arguments(self):
         return self._signature.get_number_of_signature_arguments()
 
+    def merge_point_string(self):
+        return self._signature
+
 
 class UnaryPrimitive(_AbstractPrimitive):
     _immutable_fields_ = ["_prim_fn"]
@@ -134,6 +137,28 @@ class TernaryPrimitive(_AbstractPrimitive):
 
     def get_number_of_signature_arguments(self):  # pylint: disable=no-self-use
         return 3
+
+
+class QuaternaryPrimitive(_AbstractPrimitive):
+    _immutable_fields_ = ["_prim_fn"]
+
+    def __init__(self, signature_string, universe, prim_fn, is_empty=False):
+        _AbstractPrimitive.__init__(self, signature_string, universe, is_empty)
+        self._prim_fn = prim_fn
+
+    def invoke_4(self, rcvr, arg1, arg2, arg3, ctx=None):
+        prim_fn = self._prim_fn
+        return prim_fn(rcvr, arg1, arg2, arg3)
+
+    def invoke_4_tier2(self, rcvr, arg1, arg2, arg3, ctx=None):
+        prim_fn = self._prim_fn
+        return prim_fn(rcvr, arg1, arg2, arg3)
+
+    def get_number_of_signature_arguments(self):  # pylint: disable=no-self-use
+        return 4
+
+    def merge_point_string(self):
+        return self._signature
 
 
 def _empty_invoke_ast(ivkbl, _rcvr, _args):

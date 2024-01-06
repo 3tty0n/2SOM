@@ -3,7 +3,7 @@ from rlib import jit
 from som.primitives.integer_primitives import IntegerPrimitivesBase as _Base
 from som.vmobjects.double import Double
 from som.vmobjects.integer import Integer
-from som.vmobjects.primitive import Primitive, TernaryPrimitive
+from som.vmobjects.primitive import Primitive, TernaryPrimitive, QuaternaryPrimitive
 from som.tier_type import is_tier1, is_tier2, is_hybrid
 
 
@@ -135,6 +135,27 @@ def _to_by_do(_ivkbl, stack, stack_ptr):
     return stack_ptr
 
 
+def _to_by_do_4(_ivkbl, limit, by_increment, block):
+    i = _ivkbl.get_embedded_integer()
+    block_method = block.get_method()
+    if isinstance(limit, Double):
+        _to_do_double(
+            i,
+            by_increment.get_embedded_integer(),
+            limit.get_embedded_double(),
+            block,
+            block_method,
+        )
+    else:
+        _to_do_int(
+            i,
+            by_increment.get_embedded_integer(),
+            limit.get_embedded_integer(),
+            block,
+            block_method,
+        )
+
+
 def _down_to_do_int(i, by_increment, bottom, block, block_method):
     assert isinstance(i, int)
     assert isinstance(bottom, int)
@@ -182,6 +203,9 @@ class IntegerPrimitives(_Base):
         self._install_instance_primitive(
             TernaryPrimitive("downTo:do:", self.universe, _down_to_do)
         )
+        # self._install_instance_primitive(
+        #     Primitive("to:by:do:", self.universe, _to_by_do)
+        # )
         self._install_instance_primitive(
-            Primitive("to:by:do:", self.universe, _to_by_do)
+            QuaternaryPrimitive("to:by:do:", self.universe, _to_by_do_4)
         )
