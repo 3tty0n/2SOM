@@ -98,11 +98,11 @@ class _Statistics(object):
 
         counts = sorted(self.counts, key=self.counts.get, reverse=True)
 
-        debug_print("============== Method invocations =============\n")
-        print("method,count")
-        for signature in counts:
+        #debug_print("============== Method invocations =============\n")
+        debug_print("rank,count,method")
+        for i, signature in enumerate(counts):
             # assert isinstance(signature, Symbol)
-            debug_print("%s,%d" % (signature, self.counts[signature]))
+            debug_print("%d,%d,%s" % (i+1, self.counts[signature], signature))
 
 
     @not_in_trace
