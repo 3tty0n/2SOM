@@ -9,7 +9,7 @@ from som.interpreter.ast.frame import (
     create_frame_2,
     mark_as_no_longer_on_stack,
 )
-from som.interpreter.bc.frame import create_frame_3, create_frame_4, create_frame
+from som.interpreter.bc.frame import create_frame_3, create_frame_4, create_frame, stack_pop_old_arguments_and_push_result_dli
 from som.interpreter.bc.bytecodes import bytecode_length, Bytecodes, bytecode_as_str
 from som.interpreter.bc.frame import (
     get_block_at,
@@ -1215,11 +1215,11 @@ def interpret_tier1(
             #     else:
             #         signature = method.get_constant(current_bc_idx)
             #         num_args = signature.get_number_of_signature_arguments()
-            #         rcvr = stack.take(num_args - 1, dummy=True)
+            #         rcvr = stack.take(num_args + 1, dummy=True)
             #         if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
             #             invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
             #             new_frame = _create_frame(invokable, frame, stack)
-            #             new_stack = Stack(8)
+            #             new_stack = Stack(16)
             #             result = _interpret_CALL_ASSEMBLER(
             #                 frame=new_frame,
             #                 stack=new_stack,
