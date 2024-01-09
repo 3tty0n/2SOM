@@ -47,6 +47,9 @@ class _AbstractPrimitive(AbstractObject):
             holder = "nil"
         return "Primitive(" + holder + ">>" + str(self.get_signature()) + ")"
 
+    def merge_point_string(self):
+        return str(self._signature)
+
 
 class _AstPrimitive(_AbstractPrimitive):
     _immutable_fields_ = ["_prim_fn"]
@@ -79,7 +82,7 @@ class _BcPrimitive(_AbstractPrimitive):
         return self._signature.get_number_of_signature_arguments()
 
     def merge_point_string(self):
-        return self._signature
+        return str(self._signature)
 
 
 class UnaryPrimitive(_AbstractPrimitive):
@@ -156,9 +159,6 @@ class QuaternaryPrimitive(_AbstractPrimitive):
 
     def get_number_of_signature_arguments(self):  # pylint: disable=no-self-use
         return 4
-
-    def merge_point_string(self):
-        return self._signature
 
 
 def _empty_invoke_ast(ivkbl, _rcvr, _args):
