@@ -43,7 +43,7 @@ def jit_threshold(threshold):
     ]
 
 
-def measure_gc_time():
+def measure_rss():
     def gnu_time(bm, inv):
         gnu_time = ["/usr/bin/time", "-f 'RSS:%M KB'", "-o %s_%d.txt" % (bm.lower(), inv)]
 
@@ -61,8 +61,22 @@ def measure_gc_time():
                 subprocess.run(command)
 
 
+def measure_gc_time():
+    for binary in BINS:
+        for bm in BENCHS:
+            for inv in range(INVOCATIONS):
+                extra_args, threshold = BENCHS[bm]
+                command = (
+                    [binary, "--gc-stats"]
+                    + jit_threshold(threshold)
+                    + ARGS
+                    + [bm, "100", str(extra_args)]
+                )
+                subprocess.run(command)
+
+
 def main():
-    measure_gc_time()
+    measure_rss()
 
 
 if __name__ == "__main__":
