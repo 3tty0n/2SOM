@@ -46,6 +46,7 @@ def jit_threshold(threshold):
 def measure_rss():
     def gnu_time(bm, inv):
         gnu_time = ["/usr/bin/time", "-f 'RSS:%M KB'", "-o %s_%d.txt" % (bm.lower(), inv)]
+        return gnu_time
 
     for binary in BINS:
         for bm in BENCHS:
