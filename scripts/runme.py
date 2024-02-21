@@ -24,6 +24,8 @@ BENCHS = {
     "Towers": (350, 23),
 }
 
+NICE = ["nice", "-n-20"]
+
 BINS = ["./som-bc-jit-tier1", "./som-bc-jit-tier2", "./som-bc-jit-interp-tier1"]
 
 ARGS = [
@@ -45,7 +47,7 @@ def jit_threshold(threshold):
 
 def measure_rss():
     def gnu_time(bm, inv):
-        gnu_time = ["/usr/bin/time", "-f 'RSS:%M KB'", "-o %s_%d.txt" % (bm.lower(), inv)]
+        gnu_time = ["/usr/bin/time", "-f", "'RSS:%M KB'", "-o", "./logs/%s_%d.txt" % (bm.lower(), inv)]
         return gnu_time
 
     for binary in BINS:
@@ -53,6 +55,7 @@ def measure_rss():
             for inv in range(INVOCATIONS):
                 extra_args, threshold = BENCHS[bm]
                 command = (
+                    NICE +
                     gnu_time(bm, inv)
                     + [binary]
                     + jit_threshold(threshold)
@@ -68,6 +71,7 @@ def measure_gc_time():
             for inv in range(INVOCATIONS):
                 extra_args, threshold = BENCHS[bm]
                 command = (
+                    NICE +
                     [binary, "--gc-stats"]
                     + jit_threshold(threshold)
                     + ARGS
