@@ -37,6 +37,16 @@ ARGS = [
     "--gc",
 ]
 
+
+def enable_shielding():
+    command = ["cset", "shield", "-k", "on", "-c", "4-7"]
+    subprocess.run(command)
+
+
+def with_shielding():
+    return ["cset", "shield", "-e"]
+
+
 def mkdir(path):
     if os.path.exists(path):
         return
@@ -78,8 +88,9 @@ def measure_rss():
             for inv in range(INVOCATIONS):
                 extra_args, threshold = BENCHS[bm]
                 command = (
-                    NICE +
-                    gnu_time(bm, inv, parse_bin(binary), output_dir)
+                    with_shielding()
+                    + NICE
+                    + gnu_time(bm, inv, parse_bin(binary), output_dir)
                     + [binary]
                     + jit_threshold(threshold)
                     + ARGS
@@ -100,7 +111,8 @@ def measure_gc_time():
                 output_path = "%s/%s_%s_%d.txt" % (
                     output_dir, bm.lower(), parse_bin(binary), inv)
                 command = (
-                    NICE
+                    with_shielding()
+                    + NICE
                     + [binary]
                     + jit_threshold(threshold)
                     + ["--gc-stats"]
@@ -112,7 +124,8 @@ def measure_gc_time():
 
 
 def main():
-    # measure_rss()
+    enable_shielding()
+    measure_rss()
     measure_gc_time()
 
 
