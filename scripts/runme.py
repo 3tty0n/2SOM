@@ -52,21 +52,23 @@ def jit_threshold(threshold):
     ]
 
 
+def parse_bin(bin_name):
+    if bin_name == "./som-bc-jit-tier1":
+        return "threaded"
+    elif bin_name == "./som-bc-jit-tier2":
+        return "tracing"
+    elif bin_name == "./somb-bc-interp-tier1":
+        return "interp"
+    else:
+        raise Exception
+
+
 def measure_rss():
     def gnu_time(bm, inv, bin_name, output_dir):
         gnu_time = ["/usr/bin/time", "-f", "'RSS:%M KB'", "-o", "%s/%s_%s_%d.txt" % (
             output_dir, bm.lower(), bin_name, inv)]
         return gnu_time
 
-    def parse_bin(bin_name):
-        if bin_name == "./som-bc-jit-tier1":
-            return "threaded"
-        elif bin_name == "./som-bc-jit-tier2":
-            return "tracing"
-        elif bin_name == "./somb-bc-interp-tier1":
-            return "interp"
-        else:
-            raise Exception
 
     output_dir = "logs-rss"
     mkdir(output_dir)
@@ -95,7 +97,8 @@ def measure_gc_time():
         for bm in BENCHS:
             for inv in range(INVOCATIONS):
                 extra_args, threshold = BENCHS[bm]
-                output_file = "%s/%s_%s_%d" % (output_dir, bm.lower(), binary, inv)
+                output_path = "%s/%s_%s_%d.txt" % (
+                    output_dir, bm.lower(), parse_bin(binary), inv)
                 command = (
                     NICE
                     + [binary]
@@ -104,7 +107,8 @@ def measure_gc_time():
                     + ARGS
                     + [bm, "100", str(extra_args)]
                 )
-                subprocess.run(command, stdout=output_file)
+                with open(output_path, 'w') as outfile:
+                    subprocess.run(command, stdout=outfile)
 
 
 def main():
