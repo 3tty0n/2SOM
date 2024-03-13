@@ -1,0 +1,21 @@
+#!/bin/bash
+set -x
+
+DATE=$(date +'%Y%m%d_%H%M%S')
+export PYTHONPATH=../rtime_extension:$PYTHONPATH
+
+DIR="rebench_reboot_data"
+if [ ! -d "${DIR}" ]; then
+    mkdir "${DIR}"
+fi
+DATA_FILE="${DIR}/runbench_${DATE}.data"
+
+setup() {
+    systemctl stop cron
+    cpufreq-set -r -g performance
+}
+
+setup
+
+# main
+rebench -df ${DATA_FILE} "$@"
