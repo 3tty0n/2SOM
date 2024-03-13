@@ -141,15 +141,9 @@ def measure_jit_time():
 
 
 def main():
-<<<<<<< HEAD
     enable_shielding()
     measure_rss()
     measure_gc_time()
-=======
-    # measure_gc_time()
-    # measure_rss()
-    measure_jit_time()
->>>>>>> 51c6a41 (Fix runme.py)
 
 
 if __name__ == "__main__":
