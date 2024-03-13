@@ -2,7 +2,7 @@
 import os
 import subprocess
 
-INVOCATIONS = 10
+INVOCATIONS = 30
 ITERATIONS = 100
 
 BENCHS = {
@@ -28,7 +28,6 @@ BENCHS = {
 NICE = ["nice", "-n-20"]
 
 BINS = ["./som-bc-jit-tier1", "./som-bc-jit-tier2", "./som-bc-interp-tier1"]
-# BINS = ["./som-bc-jit-tier2", "./som-bc-interp-tier1"]
 
 ARGS = [
     "-cp",
@@ -67,7 +66,7 @@ def parse_bin(bin_name):
         return "threaded"
     elif bin_name == "./som-bc-jit-tier2":
         return "tracing"
-    elif bin_name == "./somb-bc-interp-tier1":
+    elif bin_name == "./som-bc-interp-tier1":
         return "interp"
     else:
         raise Exception
@@ -88,9 +87,7 @@ def measure_rss():
             for inv in range(INVOCATIONS):
                 extra_args, threshold = BENCHS[bm]
                 command = (
-                    with_shielding()
-                    + NICE
-                    + gnu_time(bm, inv, parse_bin(binary), output_dir)
+                    gnu_time(bm, inv, parse_bin(binary), output_dir)
                     + [binary]
                     + jit_threshold(threshold)
                     + ARGS
@@ -111,9 +108,7 @@ def measure_gc_time():
                 output_path = "%s/%s_%s_%d.txt" % (
                     output_dir, bm.lower(), parse_bin(binary), inv)
                 command = (
-                    with_shielding()
-                    + NICE
-                    + [binary]
+                    [binary]
                     + jit_threshold(threshold)
                     + ["--gc-stats"]
                     + ARGS
@@ -123,10 +118,38 @@ def measure_gc_time():
                     subprocess.run(command, stdout=outfile)
 
 
+def measure_jit_time():
+
+    output_dir = "logs-pypy"
+    mkdir(output_dir)
+
+    for binary in ["./som-bc-jit-tier1", "./som-bc-jit-tier2"]:
+        for bm in BENCHS:
+            for inv in range(INVOCATIONS):
+                extra_args, threshold = BENCHS[bm]
+                output_path = "%s/%s_%s_%d.log" % (
+                    output_dir, bm.lower(), parse_bin(binary), inv)
+                command = (
+                    [binary]
+                    + jit_threshold(threshold)
+                    + ARGS
+                    + [bm, "100", str(extra_args)]
+                )
+                env = os.environ.copy()
+                env["PYPYLOG"] = "jit-summary:%s" % output_path
+                subprocess.run(command, env=env)
+
+
 def main():
+<<<<<<< HEAD
     enable_shielding()
     measure_rss()
     measure_gc_time()
+=======
+    # measure_gc_time()
+    # measure_rss()
+    measure_jit_time()
+>>>>>>> 51c6a41 (Fix runme.py)
 
 
 if __name__ == "__main__":
