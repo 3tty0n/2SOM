@@ -444,11 +444,6 @@ def _send_1(current_bc_idx, next_bc_idx,  method, frame, stack):
     layout = receiver.get_object_layout(current_universe)
     invokable = _lookup(layout, signature, method, current_bc_idx)
 
-    if not we_are_jitted():
-        if isinstance(invokable, BcMethod):
-            rcvr_type = receiver.get_class(current_universe)
-            method.set_receiver_type(current_bc_idx, rcvr_type)
-
     if not we_are_translated():
         statistics.incr_with_idx(invokable, 1)
         statistics.record_with_invokable(str(invokable))
@@ -482,11 +477,6 @@ def _send_2(current_bc_idx, next_bc_idx,  method, frame, stack):
     layout = receiver.get_object_layout(current_universe)
     invokable = _lookup(layout, signature, method, current_bc_idx)
 
-    if not we_are_jitted():
-        if isinstance(invokable, BcMethod):
-            rcvr_type = receiver.get_class(current_universe)
-            method.set_receiver_type(current_bc_idx, rcvr_type)
-
     if not we_are_translated():
         statistics.incr_with_idx(invokable, 2)
         statistics.record_with_invokable(str(invokable))
@@ -515,11 +505,6 @@ def _send_3(current_bc_idx, next_bc_idx,  method, frame, stack):
     receiver = stack.take(2)
     layout = receiver.get_object_layout(current_universe)
     invokable = _lookup(layout, signature, method, current_bc_idx)
-
-    if not we_are_jitted():
-        if isinstance(invokable, BcMethod):
-            rcvr_type = receiver.get_class(current_universe)
-            method.set_receiver_type(current_bc_idx, rcvr_type)
 
     if not we_are_translated():
         statistics.incr_with_idx(invokable, 3)
@@ -550,11 +535,6 @@ def _send_4(current_bc_idx, next_bc_idx,  method, frame, stack):
     receiver = stack.take(3)
     layout = receiver.get_object_layout(current_universe)
     invokable = _lookup(layout, signature, method, current_bc_idx)
-
-    if not we_are_jitted():
-        if isinstance(invokable, BcMethod):
-            rcvr_type = receiver.get_class(current_universe)
-            method.set_receiver_type(current_bc_idx, rcvr_type)
 
     if not we_are_translated():
         statistics.incr_with_idx(invokable, 10)
@@ -590,11 +570,6 @@ def _send_n(current_bc_idx, next_bc_idx, method, frame, stack):
 
     layout = receiver.get_object_layout(current_universe)
     invokable = _lookup(layout, signature, method, current_bc_idx)
-
-    if not we_are_jitted():
-        if isinstance(invokable, BcMethod):
-            rcvr_type = receiver.get_class(current_universe)
-            method.set_receiver_type(current_bc_idx, rcvr_type)
 
     if not we_are_translated():
         statistics.incr_with_idx(invokable, 10)
@@ -996,210 +971,40 @@ def interpret_tier1(
             _pop_field_1(current_bc_idx, next_bc_idx, method, frame, stack)
 
         elif bytecode == Bytecodes.send_1:
-            if we_are_jitted():
-                rcvr_type = method.get_receiver_type(current_bc_idx)
-                if rcvr_type is None:
-                    next_bc_idx = _send_1(
-                        current_bc_idx,
-                        next_bc_idx,
-                        method,
-                        frame,
-                        stack,
-                    )
-                else:
-                    # Polymorphic inline chache optimization for send instruction
-                    #
-                    #   if emit_ptr_eq(rcvr, rcvr_type) <- guard to check rcvr type
-                    #     ---------------------------
-                    #     fast path where PIC is enabled
-                    #     ----------------------------
-                    #     slow path for fallbac
-                    #
-                    #   -> compiled to
-                    #
-                    #   fast path:                                         slow_path:
-                    #   guard_ptr_eq(rcvr, rcvr_type)  --(guard fail)--->  i1 = call(send_1(method, frame, stack, ..))
-                    #   ...                                               /
-                    #   r1 = call_assembler(frame, stack)                /
-                    #   stack.push(r1).                                 /
-                    #   ... <---------------- (merge) -----------------/
-                    rcvr = stack.take(0, dummy=True)
-                    # guard to check the type of rcvr equals to rcvr_type
-                    if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
-                        invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
-                        new_frame = _create_frame_1(invokable, frame, stack)
-                        new_stack = Stack(16)
-                        # turn this method invocation into direct call to compiled code
-                        result = _interpret_CALL_ASSEMBLER(
-                            frame=new_frame,
-                            stack=new_stack,
-                            current_bc_idx=0,
-                            entry_bc_idx=0,
-                            method=invokable,
-                            tstack=t_empty(),
-                            dummy=True,
-                        )
-                        stack.insert(0, result, dummy=True)
-                        # This path is a slow path, going this way when the rcvr type is
-                        # different from when it is compiled
-                        jit.begin_slow_path()
-                        next_bc_idx = _send_1(
-                            current_bc_idx,
-                            next_bc_idx,
-                            method,
-                            frame,
-                            stack,
-                        )
-                        jit.end_slow_path()
-            else:
-                next_bc_idx = _send_1(
-                    current_bc_idx,
-                    next_bc_idx,
-                    method,
-                    frame,
-                    stack
-                )
+            next_bc_idx = _send_1(
+                current_bc_idx,
+                next_bc_idx,
+                method,
+                frame,
+                stack
+            )
 
         elif bytecode == Bytecodes.send_2:
-            if we_are_jitted():
-                rcvr_type = method.get_receiver_type(current_bc_idx)
-                if rcvr_type is None:
-                    next_bc_idx = _send_2(
-                        current_bc_idx,
-                        next_bc_idx,
-                        method,
-                        frame,
-                        stack
-                    )
-                else:
-                    rcvr = stack.take(1, dummy=True)
-                    if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
-                        invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
-                        new_frame = _create_frame_2(invokable, frame, stack)
-                        new_stack = Stack(16)
-                        result = _interpret_CALL_ASSEMBLER(
-                            frame=new_frame,
-                            stack=new_stack,
-                            current_bc_idx=0,
-                            entry_bc_idx=0,
-                            method=invokable,
-                            tstack=t_empty(),
-                            dummy=True,
-                        )
-                        stack.insert(0, result, dummy=True)
-                        # ---------------------------------------------------------------
-                        jit.begin_slow_path()
-                        next_bc_idx = _send_2(
-                            current_bc_idx,
-                            next_bc_idx,
-                            method,
-                            frame,
-                            stack
-                        )
-                        jit.end_slow_path()
-                        # ---------------------------------------------------------------
-            else:
-                next_bc_idx = _send_2(
-                    current_bc_idx,
-                    next_bc_idx,
-                    method,
-                    frame,
-                    stack
-                )
+            next_bc_idx = _send_2(
+                current_bc_idx,
+                next_bc_idx,
+                method,
+                frame,
+                stack
+            )
 
         elif bytecode == Bytecodes.send_3:
-            if we_are_jitted():
-                rcvr_type = method.get_receiver_type(current_bc_idx)
-                if rcvr_type is None:
-                    next_bc_idx = _send_3(
-                        current_bc_idx,
-                        next_bc_idx,
-                        method,
-                        frame,
-                        stack
-                    )
-                else:
-                    rcvr = stack.take(2, dummy=True)
-                    if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
-                        invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
-                        new_frame = _create_frame_3(invokable, frame, stack)
-                        new_stack = Stack(16)
-                        result = _interpret_CALL_ASSEMBLER(
-                            frame=new_frame,
-                            stack=new_stack,
-                            current_bc_idx=0,
-                            entry_bc_idx=0,
-                            method=invokable,
-                            tstack=t_empty(),
-                            dummy=True,
-                        )
-                        stack.insert(0, result, dummy=True)
-                        # ---------------------------------------------------------------
-                        jit.begin_slow_path()
-                        next_bc_idx = _send_3(
-                            current_bc_idx,
-                            next_bc_idx,
-                            method,
-                            frame,
-                            stack
-                        )
-                        jit.end_slow_path()
-                        # ---------------------------------------------------------------
-            else:
-                next_bc_idx = _send_3(
-                    current_bc_idx,
-                    next_bc_idx,
-                    method,
-                    frame,
-                    stack
-                )
+           next_bc_idx = _send_3(
+               current_bc_idx,
+               next_bc_idx,
+               method,
+               frame,
+               stack
+           )
 
         elif bytecode == Bytecodes.send_4:
-            if we_are_jitted():
-                rcvr_type = method.get_receiver_type(current_bc_idx)
-                if rcvr_type is None:
-                    next_bc_idx = _send_4(
-                        current_bc_idx,
-                        next_bc_idx,
-                        method,
-                        frame,
-                        stack
-                    )
-                else:
-                    rcvr = stack.take(3, dummy=True)
-                    if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
-                        invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
-                        new_frame = _create_frame_4(invokable, frame, stack)
-                        new_stack = Stack(16)
-                        result = _interpret_CALL_ASSEMBLER(
-                            frame=new_frame,
-                            stack=new_stack,
-                            current_bc_idx=0,
-                            entry_bc_idx=0,
-                            method=invokable,
-                            tstack=t_empty(),
-                            dummy=True,
-                        )
-                        stack.insert(0, result, dummy=True)
-                        # ---------------------------------------------------------------
-                        jit.begin_slow_path()
-                        next_bc_idx = _send_4(
-                            current_bc_idx,
-                            next_bc_idx,
-                            method,
-                            frame,
-                            stack
-                        )
-                        jit.end_slow_path()
-                        # ---------------------------------------------------------------
-            else:
-                next_bc_idx = _send_4(
-                    current_bc_idx,
-                    next_bc_idx,
-                    method,
-                    frame,
-                    stack
-                )
+           next_bc_idx = _send_4(
+               current_bc_idx,
+               next_bc_idx,
+               method,
+               frame,
+               stack
+           )
 
         elif bytecode == Bytecodes.send_n:
             # if we_are_jitted():
