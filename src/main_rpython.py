@@ -160,7 +160,7 @@ def target(driver, _args):
     elif is_hybrid():
         exe_name += "hybrid"
 
-    exe_name += "-no-ic"
+    exe_name += "-no-ic-no-handler-opt"
     driver.exe_name = exe_name
     return entry_point, None
 
