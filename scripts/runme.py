@@ -23,6 +23,7 @@ BENCHS = {
     "Sum": (500, 23),
     "TreeSort": (350, 23),
     "Towers": (350, 23),
+    "Json": (250, 957)
 }
 
 NICE = ["nice", "-n-20"]
@@ -31,7 +32,7 @@ BINS = ["./som-bc-jit-tier1", "./som-bc-jit-tier2", "./som-bc-interp-tier1"]
 
 ARGS = [
     "-cp",
-    "Smalltalk:Examples/Benchmarks/GraphSearch:Examples/Benchmarks/NBody:Examples/Benchmarks/LanguageFeatures:Examples/Benchmarks/TestSuite",
+    "Smalltalk:Examples/Benchmarks/Json:Examples/Benchmarks/GraphSearch:Examples/Benchmarks/NBody:Examples/Benchmarks/LanguageFeatures:Examples/Benchmarks/TestSuite",
     "Examples/Benchmarks/BenchmarkHarness.som",
     "--gc",
 ]
