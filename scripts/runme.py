@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
+import csv
 import os
+import re
 import subprocess
+import sys
 
 INVOCATIONS = 30
 ITERATIONS = 100
@@ -23,7 +26,7 @@ BENCHS = {
     "Sum": (500, 23),
     "TreeSort": (350, 23),
     "Towers": (350, 23),
-    "Json": (250, 957)
+    "Json": (250, 957),
 }
 
 NICE = ["nice", "-n-20"]
@@ -75,10 +78,14 @@ def parse_bin(bin_name):
 
 def measure_rss():
     def gnu_time(bm, inv, bin_name, output_dir):
-        gnu_time = ["/usr/bin/time", "-f", "'RSS:%M KB'", "-o", "%s/%s_%s_%d.txt" % (
-            output_dir, bm.lower(), bin_name, inv)]
+        gnu_time = [
+            "/usr/bin/time",
+            "-f",
+            "'RSS:%M KB'",
+            "-o",
+            "%s/%s_%s_%d.txt" % (output_dir, bm.lower(), bin_name, inv),
+        ]
         return gnu_time
-
 
     output_dir = "logs-rss"
     mkdir(output_dir)
@@ -98,7 +105,6 @@ def measure_rss():
 
 
 def measure_gc_time():
-
     output_dir = "logs-gc"
     mkdir(output_dir)
 
@@ -107,7 +113,11 @@ def measure_gc_time():
             for inv in range(INVOCATIONS):
                 extra_args, threshold = BENCHS[bm]
                 output_path = "%s/%s_%s_%d.txt" % (
-                    output_dir, bm.lower(), parse_bin(binary), inv)
+                    output_dir,
+                    bm.lower(),
+                    parse_bin(binary),
+                    inv,
+                )
                 command = (
                     [binary]
                     + jit_threshold(threshold)
@@ -115,12 +125,11 @@ def measure_gc_time():
                     + ARGS
                     + [bm, "100", str(extra_args)]
                 )
-                with open(output_path, 'w') as outfile:
+                with open(output_path, "w") as outfile:
                     subprocess.run(command, stdout=outfile)
 
 
 def measure_jit_time():
-
     output_dir = "logs-pypy"
     mkdir(output_dir)
 
@@ -129,7 +138,11 @@ def measure_jit_time():
             for inv in range(INVOCATIONS):
                 extra_args, threshold = BENCHS[bm]
                 output_path = "%s/%s_%s_%d.log" % (
-                    output_dir, bm.lower(), parse_bin(binary), inv)
+                    output_dir,
+                    bm.lower(),
+                    parse_bin(binary),
+                    inv,
+                )
                 command = (
                     [binary]
                     + jit_threshold(threshold)
@@ -141,10 +154,50 @@ def measure_jit_time():
                 subprocess.run(command, env=env)
 
 
+def measure_bytecode_size():
+    output_dir = "logs-byte"
+    mkdir(output_dir)
+
+    result = {}
+
+    for bm in BENCHS:
+        result[bm] = 0
+
+        output_path = "%s/%s.byte" % (output_dir, bm.lower())
+        command = ["./som.sh", "-d"] + ARGS + [bm, "1", "1"]
+        env = os.environ.copy()
+        env["SOM_INTERP"] = "BC"
+        process = subprocess.Popen(
+            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        stderr = process.stderr
+        for line in stderr:
+            line = str(line)
+            pat = "(\d+) bc\_count"
+            m = re.search(pat, line)
+            if m:
+                size = int(m.group(1))
+                result[bm] += size
+
+    for bm in result:
+        result[bm] = result[bm] - 4187
+
+    if not os.path.isdir("outputs"):
+        os.mkdir("outputs")
+
+    result = dict(sorted(result.items(), key=lambda item: item[1]))
+
+    with open("outputs/benchmark_bytesize.csv", "w") as f:
+        f.write("Program,Bytecode size\n")
+        for bm in result:
+            f.write("%s,%d\n" % (bm, result[bm]))
+
+
 def main():
     enable_shielding()
     measure_rss()
     measure_gc_time()
+    measure_bytecode_size()
 
 
 if __name__ == "__main__":
