@@ -180,6 +180,11 @@ def measure_bytecode_size():
                 result[bm] += size
 
     for bm in result:
+        if bm == "PageRank":
+            # reduce the number of bytecode used for
+            # tests by --
+            # $ grep -A 3 pageRanks logs-byte/pagerank.byte | grep "bc_count" | awk '{sum += $5} END {print sum}'
+            result[bm] = result[bm] - 20300
         result[bm] = result[bm] - 4187
 
     if not os.path.isdir("outputs"):
