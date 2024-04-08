@@ -72,6 +72,8 @@ def parse_bin(bin_name):
         return "tracing"
     elif bin_name == "./som-bc-interp-tier1":
         return "interp"
+    elif bin_name == "./som-bc-jit-hybrid":
+        return "hybrid"
     else:
         raise Exception
 
@@ -151,6 +153,34 @@ def measure_jit_time():
                 )
                 env = os.environ.copy()
                 env["PYPYLOG"] = "jit-summary:%s" % output_path
+                subprocess.run(command, env=env)
+
+
+def measure_jit_time_exp():
+    output_dir = "logs-exp-pypy"
+    mkdir(output_dir)
+
+    ARGS = [
+        "-cp",
+        "Smalltalk:Examples/Benchmarks/Json:Examples/Benchmarks/GraphSearch:Examples/Benchmarks/NBody:Examples/Benchmarks/DeltaBlue:Examples/Benchmarks/CD",
+    ]
+
+    for binary in ["./som-bc-jit-hybrid"]:
+        for bm in ["Experiment2", "Experiment3", "Experiment4"]:
+            for inv in range(10):
+                output_path = "%s/%s_%s_%d.log" % (
+                    output_dir,
+                    bm.lower(),
+                    parse_bin(binary),
+                    inv,
+                )
+                command = (
+                    [binary]
+                    + ARGS
+                    + ["Examples/Benchmarks/%s.som" % bm]
+                )
+                env = os.environ.copy()
+                env["PYPYLOG"] = "jit:%s" % output_path
                 subprocess.run(command, env=env)
 
 
