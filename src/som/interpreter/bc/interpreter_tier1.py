@@ -355,7 +355,7 @@ def _interpret_naive(
 
 
 @jit.dont_look_inside
-def _interpret_CALL_ASSEMBLER(
+def call_assembler(
     frame, stack, current_bc_idx, entry_bc_idx, method, tstack, dummy=False
 ):
     # if dummy:
@@ -1030,7 +1030,7 @@ def interpret_tier1(
                         new_frame = _create_frame_1(invokable, frame, stack)
                         new_stack = Stack(16)
                         # turn this method invocation into direct call to compiled code
-                        result = _interpret_CALL_ASSEMBLER(
+                        result = call_assembler(
                             frame=new_frame,
                             stack=new_stack,
                             current_bc_idx=0,
@@ -1077,7 +1077,7 @@ def interpret_tier1(
                         invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
                         new_frame = _create_frame_2(invokable, frame, stack)
                         new_stack = Stack(16)
-                        result = _interpret_CALL_ASSEMBLER(
+                        result = call_assembler(
                             frame=new_frame,
                             stack=new_stack,
                             current_bc_idx=0,
@@ -1124,7 +1124,7 @@ def interpret_tier1(
                         invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
                         new_frame = _create_frame_3(invokable, frame, stack)
                         new_stack = Stack(16)
-                        result = _interpret_CALL_ASSEMBLER(
+                        result = call_assembler(
                             frame=new_frame,
                             stack=new_stack,
                             current_bc_idx=0,
@@ -1171,7 +1171,7 @@ def interpret_tier1(
                         invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
                         new_frame = _create_frame_4(invokable, frame, stack)
                         new_stack = Stack(16)
-                        result = _interpret_CALL_ASSEMBLER(
+                        result = call_assembler(
                             frame=new_frame,
                             stack=new_stack,
                             current_bc_idx=0,
