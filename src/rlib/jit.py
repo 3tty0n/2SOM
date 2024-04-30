@@ -13,6 +13,7 @@ try:
     from rpython.rlib.jit import emit_ret  # pylint: disable=unused-import
     from rpython.rlib.jit import begin_slow_path  # pylint: disable=unused-import
     from rpython.rlib.jit import end_slow_path  # pylint: disable=unused-import
+    from rpython.rlib.jit import call_assembler  # pylint: disable=unused-import
 except ImportError:
     "NOT_RPYTHON"
 
@@ -84,3 +85,6 @@ except ImportError:
 
     def end_slow_path():
         pass
+
+    def call_assembler(func):
+        return func
