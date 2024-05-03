@@ -354,7 +354,7 @@ def _interpret_naive(
     return interpret_tier1(method, frame, 8, dummy)
 
 
-@jit.dont_look_inside
+@jit.call_assembler
 def call_assembler(
     frame, stack, current_bc_idx, entry_bc_idx, method, tstack, dummy=False
 ):
