@@ -1,3 +1,0 @@
-#!/bin/sh
-
-./som-bc-jit-tier1 $@ --jit off
