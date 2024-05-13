@@ -16,7 +16,11 @@ from som.interpreter.bc.frame import (
     get_self_dynamically,
 )
 from som.interpreter.bc.traverse_stack import t_empty, t_dump, t_push
-from som.interpreter.bc.hints import enable_shallow_tracing, enable_shallow_tracing_argn, enable_shallow_tracing_with_value
+from som.interpreter.bc.hints import (
+    enable_shallow_tracing,
+    enable_shallow_tracing_argn,
+    enable_shallow_tracing_with_value,
+)
 from som.interpreter.bc.tier_shifting import TRACE_THRESHOLD, ContinueInTier1, ContinueInTier2
 from som.interpreter.control_flow import ReturnException
 from som.interpreter.send import lookup_and_send_2, lookup_and_send_3, lookup_and_send_2_tier2, lookup_and_send_3_tier2
