@@ -40,6 +40,7 @@ from rlib.jit import (
     dont_look_inside
 )
 
+
 class Stack(object):
     def __init__(self, max_stack_size):
         self.items = [None] * max_stack_size
@@ -807,7 +808,7 @@ def _is_greater_two(current_bc_idx, next_bc_idx,  method, frame, stack, dummy=Fa
 
 
 @jit.dont_look_inside
-def emit_ptr_eq(rcvr, rcvr_type, dummy=False):
+def in_fast_path(rcvr, rcvr_type, dummy=False):
     from som.vm.current import current_universe
 
     if dummy:
@@ -1029,7 +1030,7 @@ def interpret_tier1(
                     #   ... <---------------- (merge) -----------------/
                     rcvr = stack.take(0, dummy=True)
                     # guard to check the type of rcvr equals to rcvr_type
-                    if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
+                    if in_fast_path(rcvr, rcvr_type, dummy=True):
                         invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
                         new_frame = _create_frame_1(invokable, frame, stack)
                         new_stack = Stack(16)
@@ -1055,6 +1056,7 @@ def interpret_tier1(
                             stack,
                         )
                         jit.end_slow_path()
+
             else:
                 next_bc_idx = _send_1(
                     current_bc_idx,
@@ -1077,7 +1079,7 @@ def interpret_tier1(
                     )
                 else:
                     rcvr = stack.take(1, dummy=True)
-                    if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
+                    if in_fast_path(rcvr, rcvr_type, dummy=True):
                         invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
                         new_frame = _create_frame_2(invokable, frame, stack)
                         new_stack = Stack(16)
@@ -1124,7 +1126,7 @@ def interpret_tier1(
                     )
                 else:
                     rcvr = stack.take(2, dummy=True)
-                    if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
+                    if in_fast_path(rcvr, rcvr_type, dummy=True):
                         invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
                         new_frame = _create_frame_3(invokable, frame, stack)
                         new_stack = Stack(16)
@@ -1171,7 +1173,7 @@ def interpret_tier1(
                     )
                 else:
                     rcvr = stack.take(3, dummy=True)
-                    if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
+                    if in_fast_path(rcvr, rcvr_type, dummy=True):
                         invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
                         new_frame = _create_frame_4(invokable, frame, stack)
                         new_stack = Stack(16)
