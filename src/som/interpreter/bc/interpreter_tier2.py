@@ -209,7 +209,7 @@ def interpret_tier2(
 
         elif bytecode == Bytecodes.push_0:
             stack_ptr += 1
-            stack[stack_ptr] = int_0
+            stack[stack_ptr] = int_0 # enable_shallow_tracing_set == (optimization) ==> setarrayitem
 
         elif bytecode == Bytecodes.push_1:
             stack_ptr += 1
@@ -845,7 +845,7 @@ def get_printable_location_tier2(bytecode_index, method):
 jitdriver = jit.JitDriver(
     name="Interpreter",
     greens=["current_bc_idx", "method"],
-    reds=["stack_ptr", "frame", "stack"],
+    reds=["stack_ptr", "frame", "stack"], # Experiment: move stack_ptr to green
     # virtualizables=['frame'],
     get_printable_location=get_printable_location_tier2,
     # the next line is a workaround around a likely bug in RPython

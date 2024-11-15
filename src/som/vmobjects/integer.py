@@ -1,5 +1,7 @@
 from rlib.arithmetic import ovfcheck, bigint_from_int, divrem, IntType
 from rlib.llop import as_32_bit_signed_value, int_mod, Signed
+from rlib.jit import elidable, dont_look_inside, elidable_promote
+from rpython.rlib.rarithmetic import intmask
 
 from som.vmobjects.abstract_object import AbstractObject
 from som.vm.globals import trueObject, falseObject
@@ -14,8 +16,9 @@ class Integer(AbstractObject):
         assert isinstance(value, IntType), "Value: " + str(value)
         self._embedded_integer = value
 
+    @dont_look_inside
     def get_embedded_integer(self):
-        return self._embedded_integer
+        return intmask(self._embedded_integer)
 
     def get_embedded_string(self):
         return str(self._embedded_integer)
@@ -34,6 +37,7 @@ class Integer(AbstractObject):
 
         return Double(float(self._embedded_integer))
 
+    @dont_look_inside
     def prim_less_than(self, right):
         from som.vmobjects.double import Double
         from som.vmobjects.biginteger import BigInteger
@@ -47,6 +51,7 @@ class Integer(AbstractObject):
             return self._to_double().prim_less_than(right)
         return self._embedded_integer < right.get_embedded_integer()
 
+    @dont_look_inside
     def prim_less_than_or_equal(self, right):
         from som.vmobjects.double import Double
         from som.vmobjects.biginteger import BigInteger
@@ -65,6 +70,7 @@ class Integer(AbstractObject):
             return trueObject
         return falseObject
 
+    @dont_look_inside
     def prim_greater_than(self, right):
         from som.vmobjects.double import Double
         from som.vmobjects.biginteger import BigInteger
@@ -83,6 +89,7 @@ class Integer(AbstractObject):
             return trueObject
         return falseObject
 
+    @dont_look_inside
     def prim_greater_than_or_equal(self, right):
         from som.vmobjects.double import Double
         from som.vmobjects.biginteger import BigInteger
@@ -101,23 +108,28 @@ class Integer(AbstractObject):
             return trueObject
         return falseObject
 
+    @dont_look_inside
     def prim_as_string(self):
         from som.vmobjects.string import String
 
         return String(str(self._embedded_integer))
 
+    @dont_look_inside
     def prim_as_double(self):
         from som.vmobjects.double import Double
 
         return Double(float(self._embedded_integer))
 
+    @dont_look_inside
     def prim_abs(self):
         return Integer(abs(self._embedded_integer))
 
+    @dont_look_inside
     def prim_as_32_bit_signed_value(self):
         val = as_32_bit_signed_value(self._embedded_integer)
         return Integer(val)
 
+    @dont_look_inside
     def prim_inc(self):
         from som.vmobjects.biginteger import BigInteger
 
@@ -128,6 +140,7 @@ class Integer(AbstractObject):
         except OverflowError:
             return BigInteger(bigint_from_int(l).add(bigint_from_int(1)))
 
+    @dont_look_inside
     def prim_dec(self):
         from som.vmobjects.biginteger import BigInteger
 
@@ -138,6 +151,7 @@ class Integer(AbstractObject):
         except OverflowError:
             return BigInteger(bigint_from_int(l).sub(bigint_from_int(1)))
 
+    @dont_look_inside
     def prim_add(self, right):
         from som.vmobjects.double import Double
         from som.vmobjects.biginteger import BigInteger
@@ -158,6 +172,7 @@ class Integer(AbstractObject):
         except OverflowError:
             return BigInteger(bigint_from_int(l).add(bigint_from_int(r)))
 
+    @dont_look_inside
     def prim_subtract(self, right):
         from som.vmobjects.double import Double
         from som.vmobjects.biginteger import BigInteger
@@ -177,6 +192,7 @@ class Integer(AbstractObject):
         except OverflowError:
             return BigInteger(bigint_from_int(l).sub(bigint_from_int(r)))
 
+    @dont_look_inside
     def prim_multiply(self, right):
         from som.vmobjects.double import Double
         from som.vmobjects.biginteger import BigInteger
@@ -196,6 +212,7 @@ class Integer(AbstractObject):
         except OverflowError:
             return BigInteger(bigint_from_int(l).mul(bigint_from_int(r)))
 
+    @dont_look_inside
     def prim_double_div(self, right):
         from som.vmobjects.double import Double
         from som.vmobjects.biginteger import BigInteger
@@ -211,6 +228,7 @@ class Integer(AbstractObject):
         r = right.get_embedded_integer()
         return Double(l / float(r))
 
+    @dont_look_inside
     def prim_int_div(self, right):
         from som.vmobjects.double import Double
         from som.vmobjects.biginteger import BigInteger
@@ -226,6 +244,7 @@ class Integer(AbstractObject):
         r = right.get_embedded_integer()
         return Integer(l // r)
 
+    @dont_look_inside
     def prim_modulo(self, right):
         from som.vmobjects.double import Double
         from som.vmobjects.biginteger import BigInteger
@@ -241,6 +260,7 @@ class Integer(AbstractObject):
         r = right.get_embedded_integer()
         return Integer(l % r)
 
+    @dont_look_inside
     def prim_remainder(self, right):
         from som.vmobjects.double import Double
         from som.vmobjects.biginteger import BigInteger
@@ -256,6 +276,7 @@ class Integer(AbstractObject):
         r = right.get_embedded_integer()
         return Integer(int_mod(Signed, l, r))
 
+    @dont_look_inside
     def prim_and(self, right):
         from som.vmobjects.double import Double
         from som.vmobjects.biginteger import BigInteger
@@ -271,6 +292,7 @@ class Integer(AbstractObject):
         r = right.get_embedded_integer()
         return Integer(l & r)
 
+    @dont_look_inside
     def prim_equals(self, right):
         from som.vmobjects.double import Double
         from som.vmobjects.biginteger import BigInteger
@@ -292,6 +314,7 @@ class Integer(AbstractObject):
             return trueObject
         return falseObject
 
+    @dont_look_inside
     def prim_unequals(self, right):
         from som.vmobjects.double import Double
         from som.vmobjects.biginteger import BigInteger

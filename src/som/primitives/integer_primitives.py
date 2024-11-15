@@ -11,6 +11,7 @@ from rlib.arithmetic import (
     ParseStringOverflowError,
 )
 from rlib.llop import as_32_bit_unsigned_value, unsigned_right_shift
+from rlib.jit import dont_look_inside, elidable
 
 from som.primitives.primitives import Primitives
 from som.vm.globals import nilObject, falseObject, trueObject
@@ -21,24 +22,24 @@ from som.vmobjects.integer import Integer
 from som.vmobjects.primitive import UnaryPrimitive, BinaryPrimitive
 from som.vmobjects.string import String
 
-
+@dont_look_inside
 def _as_string(rcvr):
     return rcvr.prim_as_string()
 
-
+@dont_look_inside
 def _as_double(rcvr):
     return rcvr.prim_as_double()
 
-
+@dont_look_inside
 def _as_32_bit_signed_value(rcvr):
     return rcvr.prim_as_32_bit_signed_value()
 
-
+@dont_look_inside
 def _as_32_bit_unsigned_value(rcvr):
     val = as_32_bit_unsigned_value(rcvr.get_embedded_integer())
     return Integer(val)
 
-
+@dont_look_inside
 def _sqrt(rcvr):
     assert isinstance(rcvr, Integer)
     res = sqrt(rcvr.get_embedded_integer())
@@ -46,83 +47,84 @@ def _sqrt(rcvr):
         return Integer(int(res))
     return Double(res)
 
-
+@dont_look_inside
 def _plus(left, right):
     return left.prim_add(right)
 
-
+@dont_look_inside
 def _minus(left, right):
     return left.prim_subtract(right)
 
-
+@dont_look_inside
 def _multiply(left, right):
     return left.prim_multiply(right)
 
-
+@dont_look_inside
 def _double_div(left, right):
     return left.prim_double_div(right)
 
-
+@dont_look_inside
 def _int_div(left, right):
     return left.prim_int_div(right)
 
-
+@dont_look_inside
 def _mod(left, right):
     return left.prim_modulo(right)
 
-
+@dont_look_inside
 def _remainder(left, right):
     return left.prim_remainder(right)
 
-
+@dont_look_inside
 def _and(left, right):
     return left.prim_and(right)
 
-
+@dont_look_inside
 def _equals_equals(left, right):
     if isinstance(right, Integer) or isinstance(right, BigInteger):
         return left.prim_equals(right)
     return falseObject
 
-
+@dont_look_inside
 def _equals(left, right):
     return left.prim_equals(right)
 
-
+@dont_look_inside
 def _unequals(left, right):
     return left.prim_unequals(right)
 
-
+@dont_look_inside
 def _min(left, right):
     if left.prim_less_than(right):
         return left
     return right
 
-
+@dont_look_inside
 def _max(left, right):
     if left.prim_less_than(right):
         return right
     return left
 
 
+@dont_look_inside
 def _less_than(left, right):
     if left.prim_less_than(right):
         return trueObject
     return falseObject
 
-
+@dont_look_inside
 def _less_than_or_equal(left, right):
     return left.prim_less_than_or_equal(right)
 
-
+@dont_look_inside
 def _greater_than(left, right):
     return left.prim_greater_than(right)
-
+@dont_look_inside
 
 def _greater_than_or_equal(left, right):
     return left.prim_greater_than_or_equal(right)
 
-
+@dont_look_inside
 def _left_shift(left, right):
     assert isinstance(right, Integer)
 
@@ -140,7 +142,7 @@ def _left_shift(left, right):
     except OverflowError:
         return BigInteger(bigint_from_int(left_val).lshift(right_val))
 
-
+@dont_look_inside
 def _unsigned_right_shift(left, right):
     assert isinstance(right, Integer)
 
@@ -149,13 +151,13 @@ def _unsigned_right_shift(left, right):
 
     return Integer(unsigned_right_shift(left_val, right_val))
 
-
+@dont_look_inside
 def _bit_xor(left, right):
     assert isinstance(right, Integer)
     result = left.get_embedded_integer() ^ right.get_embedded_integer()
     return Integer(result)
 
-
+@dont_look_inside
 def _abs(rcvr):
     return rcvr.prim_abs()
 

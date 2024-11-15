@@ -1,7 +1,9 @@
 from som.interp_type import is_ast_interpreter
 from som.vmobjects.abstract_object import AbstractObject
+from som.vmobjects.integer import Integer
 
 from rlib.jit import dont_look_inside
+from rpython.rlib.objectmodel import enforceargs
 
 class _AbstractPrimitive(AbstractObject):
     _immutable_fields_ = ["_is_empty", "_signature", "_holder"]
@@ -72,11 +74,11 @@ class _BcPrimitive(_AbstractPrimitive):
         self._prim_fn = prim_fn
 
     @dont_look_inside
-    def invoke_n(self, stack, stack_ptr, ctx=None):
+    def invoke_n(self, stack, stack_ptr):
         prim_fn = self._prim_fn
         return prim_fn(self, stack, stack_ptr)
 
-    def invoke_n_tier2(self, stack, stack_ptr, ctx=None):
+    def invoke_n_tier2(self, stack, stack_ptr):
         prim_fn = self._prim_fn
         return prim_fn(self, stack, stack_ptr)
 
@@ -95,11 +97,11 @@ class UnaryPrimitive(_AbstractPrimitive):
         self._prim_fn = prim_fn
 
     @dont_look_inside
-    def invoke_1(self, rcvr, ctx=None):
+    def invoke_1(self, rcvr):
         prim_fn = self._prim_fn
         return prim_fn(rcvr)
 
-    def invoke_1_tier2(self, rcvr, ctx=None):
+    def invoke_1_tier2(self, rcvr):
         prim_fn = self._prim_fn
         return prim_fn(rcvr)
 
@@ -115,11 +117,11 @@ class BinaryPrimitive(_AbstractPrimitive):
         self._prim_fn = prim_fn
 
     @dont_look_inside
-    def invoke_2(self, rcvr, arg, ctx=None):
+    def invoke_2(self, rcvr, arg):
         prim_fn = self._prim_fn
         return prim_fn(rcvr, arg)
 
-    def invoke_2_tier2(self, rcvr, arg, ctx=None):
+    def invoke_2_tier2(self, rcvr, arg):
         prim_fn = self._prim_fn
         return prim_fn(rcvr, arg)
 
@@ -135,11 +137,11 @@ class TernaryPrimitive(_AbstractPrimitive):
         self._prim_fn = prim_fn
 
     @dont_look_inside
-    def invoke_3(self, rcvr, arg1, arg2, ctx=None):
+    def invoke_3(self, rcvr, arg1, arg2):
         prim_fn = self._prim_fn
         return prim_fn(rcvr, arg1, arg2)
 
-    def invoke_3_tier2(self, rcvr, arg1, arg2, ctx=None):
+    def invoke_3_tier2(self, rcvr, arg1, arg2):
         prim_fn = self._prim_fn
         return prim_fn(rcvr, arg1, arg2)
 
@@ -154,11 +156,12 @@ class QuaternaryPrimitive(_AbstractPrimitive):
         _AbstractPrimitive.__init__(self, signature_string, universe, is_empty)
         self._prim_fn = prim_fn
 
-    def invoke_4(self, rcvr, arg1, arg2, arg3, ctx=None):
+    @dont_look_inside
+    def invoke_4(self, rcvr, arg1, arg2, arg3):
         prim_fn = self._prim_fn
         return prim_fn(rcvr, arg1, arg2, arg3)
 
-    def invoke_4_tier2(self, rcvr, arg1, arg2, arg3, ctx=None):
+    def invoke_4_tier2(self, rcvr, arg1, arg2, arg3):
         prim_fn = self._prim_fn
         return prim_fn(rcvr, arg1, arg2, arg3)
 

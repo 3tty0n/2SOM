@@ -54,35 +54,35 @@ class LiteralReturn(AbstractTrivialMethod):
             self._value.set_holder(value)
 
     @dont_look_inside
-    def invoke_1(self, _rcvr, ctx=None):
+    def invoke_1(self, _rcvr):
         return self._value
 
-    def invoke_1_tier2(self, _rcvr, ctx=None):
-        return self._value
-
-    @dont_look_inside
-    def invoke_2(self, _rcvr, _arg1, ctx=None):
-        return self._value
-
-    def invoke_2_tier2(self, _rcvr, _arg1, ctx=None):
+    def invoke_1_tier2(self, _rcvr):
         return self._value
 
     @dont_look_inside
-    def invoke_3(self, _rcvr, _arg1, _arg2, ctx=None):
+    def invoke_2(self, _rcvr, _arg1):
         return self._value
 
-    def invoke_3_tier2(self, _rcvr, _arg1, _arg2, ctx=None):
-        return self._value
-
-    @dont_look_inside
-    def invoke_4(self, _rcvr, _arg1, _arg2, _arg3, ctx=None):
-        return self._value
-
-    def invoke_4_tier2(self, _rcvr, _arg1, _arg2, _arg3, ctx=None):
+    def invoke_2_tier2(self, _rcvr, _arg1):
         return self._value
 
     @dont_look_inside
-    def invoke_n(self, stack, stack_ptr, ctx=None):
+    def invoke_3(self, _rcvr, _arg1, _arg2):
+        return self._value
+
+    def invoke_3_tier2(self, _rcvr, _arg1, _arg2):
+        return self._value
+
+    @dont_look_inside
+    def invoke_4(self, _rcvr, _arg1, _arg2, _arg3):
+        return self._value
+
+    def invoke_4_tier2(self, _rcvr, _arg1, _arg2, _arg3):
+        return self._value
+
+    @dont_look_inside
+    def invoke_n(self, stack, stack_ptr):
         return stack_pop_old_arguments_and_push_result(
             stack,
             stack_ptr,
@@ -90,7 +90,7 @@ class LiteralReturn(AbstractTrivialMethod):
             self._value,
         )
 
-    def invoke_n_tier2(self, stack, stack_ptr, ctx=None):
+    def invoke_n_tier2(self, stack, stack_ptr):
         return stack_pop_old_arguments_and_push_result(
             stack,
             stack_ptr,
@@ -126,7 +126,7 @@ class GlobalRead(AbstractTrivialMethod):
         self.universe = universe
 
     @dont_look_inside
-    def invoke_1(self, rcvr, ctx=None):
+    def invoke_1(self, rcvr):
         if self._assoc is not None:
             return self._assoc.value
 
@@ -140,7 +140,7 @@ class GlobalRead(AbstractTrivialMethod):
             "unknownGlobal:",
         )
 
-    def invoke_1_tier2(self, rcvr, ctx=None):
+    def invoke_1_tier2(self, rcvr):
         if self._assoc is not None:
             return self._assoc.value
 
@@ -155,10 +155,10 @@ class GlobalRead(AbstractTrivialMethod):
         )
 
     @dont_look_inside
-    def invoke_2(self, rcvr, _arg1, ctx=None):
+    def invoke_2(self, rcvr, _arg1):
         return self.invoke_1(rcvr)
 
-    def invoke_2_tier2(self, rcvr, _arg1, ctx=None):
+    def invoke_2_tier2(self, rcvr, _arg1):
         return self.invoke_1_tier2(rcvr)
 
     @dont_look_inside
@@ -220,14 +220,14 @@ class FieldRead(AbstractTrivialMethod):
         self._context_level = context_level
 
     @dont_look_inside
-    def invoke_1(self, rcvr, ctx=None):
+    def invoke_1(self, rcvr):
         if self._context_level == 0:
             return rcvr.get_field(self._field_idx)
 
         outer_self = determine_outer_self(rcvr, self._context_level)
         return outer_self.get_field(self._field_idx)
 
-    def invoke_1_tier2(self, rcvr, ctx=None):
+    def invoke_1_tier2(self, rcvr):
         if self._context_level == 0:
             return rcvr.get_field(self._field_idx)
 
@@ -235,28 +235,28 @@ class FieldRead(AbstractTrivialMethod):
         return outer_self.get_field(self._field_idx)
 
     @dont_look_inside
-    def invoke_2(self, rcvr, _arg1, ctx=None):
+    def invoke_2(self, rcvr, _arg1):
         return self.invoke_1(rcvr)
 
-    def invoke_2_tier2(self, rcvr, _arg1, ctx=None):
+    def invoke_2_tier2(self, rcvr, _arg1):
         return self.invoke_1_tier2(rcvr)
 
     @dont_look_inside
-    def invoke_3(self, rcvr, _arg1, _arg2, ctx=None):
+    def invoke_3(self, rcvr, _arg1, _arg2):
         return self.invoke_1(rcvr)
 
-    def invoke_3_tier2(self, rcvr, _arg1, _arg2, ctx=None):
+    def invoke_3_tier2(self, rcvr, _arg1, _arg2):
         return self.invoke_1_tier2(rcvr)
 
     @dont_look_inside
-    def invoke_4(self, rcvr, _arg1, _arg2, _arg3, ctx=None):
+    def invoke_4(self, rcvr, _arg1, _arg2, _arg3):
         return self.invoke_1(rcvr)
 
-    def invoke_4_tier2(self, rcvr, _arg1, _arg2, _arg3, ctx=None):
+    def invoke_4_tier2(self, rcvr, _arg1, _arg2, _arg3):
         return self.invoke_1(rcvr)
 
     @dont_look_inside
-    def invoke_n(self, stack, stack_ptr, ctx=None):
+    def invoke_n(self, stack, stack_ptr):
         num_args = self._signature.get_number_of_signature_arguments()
         rcvr = stack[stack_ptr - (num_args - 1)]
         value = self.invoke_1(rcvr)
@@ -267,7 +267,7 @@ class FieldRead(AbstractTrivialMethod):
             value,
         )
 
-    def invoke_n_tier2(self, stack, stack_ptr, ctx=None):
+    def invoke_n_tier2(self, stack, stack_ptr):
         num_args = self._signature.get_number_of_signature_arguments()
         rcvr = stack[stack_ptr - (num_args - 1)]
         value = self.invoke_1_tier2(rcvr)
@@ -299,40 +299,45 @@ class FieldWrite(AbstractTrivialMethod):
         self._field_idx = field_idx
         self._arg_idx = arg_idx
 
-    def invoke_1(self, _rcvr, ctx=None):
+    @dont_look_inside
+    def invoke_1(self, _rcvr):
         raise NotImplementedError(
             "Not supported, should never be called. We need an argument"
         )
 
-    def invoke_1_tier2(self, _rcvr, ctx=None):
+    def invoke_1_tier2(self, _rcvr):
         raise NotImplementedError(
             "Not supported, should never be called. We need an argument"
         )
 
-    def invoke_2(self, rcvr, arg1, ctx=None):
+    @dont_look_inside
+    def invoke_2(self, rcvr, arg1):
         rcvr.set_field(self._field_idx, arg1)
         return rcvr
 
-    def invoke_2_tier2(self, rcvr, arg1, ctx=None):
+    def invoke_2_tier2(self, rcvr, arg1):
         rcvr.set_field(self._field_idx, arg1)
         return rcvr
 
-    def invoke_3(self, rcvr, arg1, arg2, ctx=None):
+    @dont_look_inside
+    def invoke_3(self, rcvr, arg1, arg2):
         if self._arg_idx == 1:
             return self.invoke_2(rcvr, arg1)
         return self.invoke_2(rcvr, arg2)
 
-    def invoke_3_tier2(self, rcvr, arg1, arg2, ctx=None):
+    def invoke_3_tier2(self, rcvr, arg1, arg2):
         if self._arg_idx == 1:
             return self.invoke_2_tier2(rcvr, arg1)
         return self.invoke_2_tier2(rcvr, arg2)
 
-    def invoke_4(self, rcvr, arg1, arg2, arg3, ctx=None):
+    @dont_look_inside
+    def invoke_4(self, rcvr, arg1, arg2, arg3):
         if self._arg_idx == 1:
             return self.invoke_2(rcvr, arg1)
         return self.invoke_2(rcvr, arg2)
 
-    def invoke_n(self, stack, stack_ptr, ctx=None):
+    @dont_look_inside
+    def invoke_n(self, stack, stack_ptr):
         num_args = self._signature.get_number_of_signature_arguments()
         rcvr = stack[stack_ptr - (num_args - 1)]
         arg = stack[stack_ptr - (num_args - self._arg_idx)]
@@ -344,7 +349,7 @@ class FieldWrite(AbstractTrivialMethod):
             rcvr,
         )
 
-    def invoke_n_tier2(self, stack, stack_ptr, ctx=None):
+    def invoke_n_tier2(self, stack, stack_ptr):
         num_args = self._signature.get_number_of_signature_arguments()
         rcvr = stack[stack_ptr - (num_args - 1)]
         arg = stack[stack_ptr - (num_args - self._arg_idx)]

@@ -276,16 +276,16 @@ def _interp_with_nlr_tier2(method, new_frame, max_stack_size):
 class BcMethod(BcAbstractMethod):
 
     @dont_look_inside
-    def invoke_1(self, rcvr, ctx=None):
+    def invoke_1(self, rcvr):
         new_frame = create_frame_1(rcvr, self._size_frame, self._size_inner)
         return interpret(self, new_frame, self._maximum_number_of_stack_elements)
 
-    def invoke_1_tier2(self, rcvr, ctx=None):
+    def invoke_1_tier2(self, rcvr):
         new_frame = create_frame_1(rcvr, self._size_frame, self._size_inner)
         return interpret_tier2(self, new_frame, self._maximum_number_of_stack_elements)
 
     @dont_look_inside
-    def invoke_2(self, rcvr, arg1, ctx=None):
+    def invoke_2(self, rcvr, arg1):
         new_frame = create_frame_2(
             rcvr,
             arg1,
@@ -295,7 +295,7 @@ class BcMethod(BcAbstractMethod):
         )
         return interpret(self, new_frame, self._maximum_number_of_stack_elements)
 
-    def invoke_2_tier2(self, rcvr, arg1, ctx=None):
+    def invoke_2_tier2(self, rcvr, arg1):
         new_frame = create_frame_2(
             rcvr,
             arg1,
@@ -306,7 +306,7 @@ class BcMethod(BcAbstractMethod):
         return interpret_tier2(self, new_frame, self._maximum_number_of_stack_elements)
 
     @dont_look_inside
-    def invoke_3(self, rcvr, arg1, arg2, ctx=None):
+    def invoke_3(self, rcvr, arg1, arg2):
         new_frame = create_frame_3(
             self._arg_inner_access,
             self._size_frame,
@@ -317,7 +317,7 @@ class BcMethod(BcAbstractMethod):
         )
         return interpret(self, new_frame, self._maximum_number_of_stack_elements)
 
-    def invoke_3_tier2(self, rcvr, arg1, arg2, ctx=None):
+    def invoke_3_tier2(self, rcvr, arg1, arg2):
         new_frame = create_frame_3(
             self._arg_inner_access,
             self._size_frame,
@@ -329,7 +329,7 @@ class BcMethod(BcAbstractMethod):
         return interpret_tier2(self, new_frame, self._maximum_number_of_stack_elements)
 
     @dont_look_inside
-    def invoke_4(self, rcvr, arg1, arg2, arg3, ctx=None):
+    def invoke_4(self, rcvr, arg1, arg2, arg3):
         new_frame = create_frame_4(
             self._arg_inner_access,
             self._size_frame,
@@ -341,7 +341,7 @@ class BcMethod(BcAbstractMethod):
         )
         return interpret(self, new_frame, self._maximum_number_of_stack_elements)
 
-    def invoke_4_tier2(self, rcvr, arg1, arg2, arg3, ctx=None):
+    def invoke_4_tier2(self, rcvr, arg1, arg2, arg3):
         new_frame = create_frame_4(
             self._arg_inner_access,
             self._size_frame,
@@ -354,7 +354,7 @@ class BcMethod(BcAbstractMethod):
         return interpret_tier2(self, new_frame, self._maximum_number_of_stack_elements)
 
     @dont_look_inside
-    def invoke_n(self, stack, stack_ptr, ctx=None):
+    def invoke_n(self, stack, stack_ptr):
         new_frame = create_frame(
             self._arg_inner_access,
             self._size_frame,
@@ -368,7 +368,7 @@ class BcMethod(BcAbstractMethod):
             stack, stack_ptr, self._number_of_arguments, result
         )
 
-    def invoke_n_tier2(self, stack, stack_ptr, ctx=None):
+    def invoke_n_tier2(self, stack, stack_ptr):
         new_frame = create_frame(
             self._arg_inner_access,
             self._size_frame,
@@ -759,16 +759,16 @@ class _BackJumpPatch(HeapEntry):
 class BcMethodNLR(BcMethod):
 
     @dont_look_inside
-    def invoke_1(self, rcvr, ctx=None):
+    def invoke_1(self, rcvr):
         new_frame = create_frame_1(rcvr, self._size_frame, self._size_inner)
         return _interp_with_nlr(self, new_frame, self._maximum_number_of_stack_elements)
 
-    def invoke_1_tier2(self, rcvr, ctx=None):
+    def invoke_1_tier2(self, rcvr):
         new_frame = create_frame_1(rcvr, self._size_frame, self._size_inner)
         return _interp_with_nlr_tier2(self, new_frame, self._maximum_number_of_stack_elements)
 
     @dont_look_inside
-    def invoke_2(self, rcvr, arg1, ctx=None):
+    def invoke_2(self, rcvr, arg1):
         new_frame = create_frame_2(
             rcvr,
             arg1,
@@ -778,7 +778,7 @@ class BcMethodNLR(BcMethod):
         )
         return _interp_with_nlr(self, new_frame, self._maximum_number_of_stack_elements)
 
-    def invoke_2_tier2(self, rcvr, arg1, ctx=None):
+    def invoke_2_tier2(self, rcvr, arg1):
         new_frame = create_frame_2(
             rcvr,
             arg1,
@@ -789,7 +789,7 @@ class BcMethodNLR(BcMethod):
         return _interp_with_nlr_tier2(self, new_frame, self._maximum_number_of_stack_elements)
 
     @dont_look_inside
-    def invoke_3(self, rcvr, arg1, arg2, ctx=None):
+    def invoke_3(self, rcvr, arg1, arg2):
         new_frame = create_frame_3(
             self._arg_inner_access,
             self._size_frame,
@@ -800,7 +800,7 @@ class BcMethodNLR(BcMethod):
         )
         return _interp_with_nlr(self, new_frame, self._maximum_number_of_stack_elements)
 
-    def invoke_3_tier2(self, rcvr, arg1, arg2, ctx=None):
+    def invoke_3_tier2(self, rcvr, arg1, arg2):
         new_frame = create_frame_3(
             self._arg_inner_access,
             self._size_frame,
@@ -812,7 +812,7 @@ class BcMethodNLR(BcMethod):
         return _interp_with_nlr_tier2(self, new_frame, self._maximum_number_of_stack_elements)
 
     @dont_look_inside
-    def invoke_n(self, stack, stack_ptr, ctx=None):
+    def invoke_n(self, stack, stack_ptr):
         new_frame = create_frame(
             self._arg_inner_access,
             self._size_frame,
@@ -838,7 +838,7 @@ class BcMethodNLR(BcMethod):
                 )
             raise e
 
-    def invoke_n_tier2(self, stack, stack_ptr, ctx=None):
+    def invoke_n_tier2(self, stack, stack_ptr):
         new_frame = create_frame(
             self._arg_inner_access,
             self._size_frame,
