@@ -46,7 +46,7 @@ def interpret(method, frame, max_stack_size, dummy=False):
     In the whle loop we can define the rule to shift the compilation timer.
     Movement from interpreter to interpreter is implemented using exceptions.
     """
-    from som.interpreter.bc.interpreter_tier1 import interpret_tier1
+    from som.interpreter.bc.interpreter_tier1_tracing import interpret_tier1
     from som.interpreter.bc.interpreter_tier2 import interpret_tier2
 
     if dummy:
