@@ -1001,6 +1001,7 @@ def interpret_tier1(
             _pop_field_1(current_bc_idx, next_bc_idx, method, frame, stack)
 
         elif bytecode == Bytecodes.send_1:
+
             if we_are_jitted():
                 rcvr_type = method.get_receiver_type(current_bc_idx)
                 if rcvr_type is None:
@@ -1208,58 +1209,17 @@ def interpret_tier1(
                 )
 
         elif bytecode == Bytecodes.send_n:
-            # if we_are_jitted():
-            #     rcvr_type = method.get_receiver_type(current_bc_idx)
-            #     if rcvr_type is None:
-            #         next_bc_idx = _send_n(
-            #             current_bc_idx,
-            #             next_bc_idx,
-            #             method,
-            #             frame,
-            #             stack,
-            #         )
-            #     else:
-            #         signature = method.get_constant(current_bc_idx)
-            #         num_args = signature.get_number_of_signature_arguments()
-            #         rcvr = stack.take(num_args + 1, dummy=True)
-            #         if emit_ptr_eq(rcvr, rcvr_type, dummy=True):
-            #             invokable = _lookup_invokable(rcvr_type, current_bc_idx, method)
-            #             new_frame = _create_frame(invokable, frame, stack)
-            #             new_stack = Stack(16)
-            #             result = _interpret_CALL_ASSEMBLER(
-            #                 frame=new_frame,
-            #                 stack=new_stack,
-            #                 current_bc_idx=0,
-            #                 entry_bc_idx=0,
-            #                 method=invokable,
-            #                 tstack=t_empty(),
-            #                 dummy=True,
-            #             )
-            #             stack = stack_pop_old_arguments_and_push_result_dli(
-            #                 stack, num_args, result, dummy=True)
-            #             # ---------------------------------------------------------------
-            #             jit.begin_slow_path()
-            #             next_bc_idx = _send_n(
-            #                 current_bc_idx,
-            #                 next_bc_idx,
-            #                 method,
-            #                 frame,
-            #                 stack,
-            #             )
-            #             jit.end_slow_path()
-            #             # ---------------------------------------------------------------
-            # else:
-            #     next_bc_idx = _send_n(
-            #         current_bc_idx,
-            #         next_bc_idx,
-            #         method,
-            #         frame,
-            #         stack,
-            #     )
-
+            if is_hybrid():
+                if method._counts[current_bc_idx] > TRACE_THRESHOLD and tstack.t_is_empty():
+                    raise ContinueInTier2(method, frame, stack, current_bc_idx)
+                method.incr_count(current_bc_idx)
             next_bc_idx = _send_n(current_bc_idx, next_bc_idx,  method, frame, stack)
 
         elif bytecode == Bytecodes.super_send:
+            if is_hybrid():
+                if method._counts[current_bc_idx] > TRACE_THRESHOLD and tstack.t_is_empty():
+                    raise ContinueInTier2(method, frame, stack, current_bc_idx)
+                method.incr_count(current_bc_idx)
             _do_super_send(current_bc_idx, next_bc_idx,  method, frame, stack)
 
         elif bytecode == Bytecodes.return_local:
@@ -1350,6 +1310,10 @@ def interpret_tier1(
             next_bc_idx = current_bc_idx + method.get_bytecode(current_bc_idx + 1)
 
         elif bytecode == Bytecodes.jump_on_true_top_nil:
+            if is_hybrid():
+                if method._counts[current_bc_idx] > TRACE_THRESHOLD and tstack.t_is_empty():
+                    raise ContinueInTier2(method, frame, stack, current_bc_idx)
+                method.incr_count(current_bc_idx)
             target_bc_idx = current_bc_idx + method.get_bytecode(current_bc_idx + 1)
             if we_are_jitted():
                 if _is_true_object(current_bc_idx, next_bc_idx,  method, frame, stack, dummy=True):
@@ -1364,6 +1328,10 @@ def interpret_tier1(
                     stack.push(nilObject)
 
         elif bytecode == Bytecodes.jump_on_false_top_nil:
+            if is_hybrid():
+                if method._counts[current_bc_idx] > TRACE_THRESHOLD and tstack.t_is_empty():
+                    raise ContinueInTier2(method, frame, stack, current_bc_idx)
+                method.incr_count(current_bc_idx)
             target_bc_idx = current_bc_idx + method.get_bytecode(current_bc_idx + 1)
             if we_are_jitted():
                 if _is_false_object(current_bc_idx, next_bc_idx,  method, frame, stack, dummy=True):
@@ -1378,6 +1346,10 @@ def interpret_tier1(
                     stack.push(nilObject)
 
         elif bytecode == Bytecodes.jump_on_true_pop:
+            if is_hybrid():
+                if method._counts[current_bc_idx] > TRACE_THRESHOLD and tstack.t_is_empty():
+                    raise ContinueInTier2(method, frame, stack, current_bc_idx)
+                method.incr_count(current_bc_idx)
             target_bc_idx = current_bc_idx + method.get_bytecode(current_bc_idx + 1)
             if we_are_jitted():
                 if _is_true_object(current_bc_idx, next_bc_idx,  method, frame, stack, dummy=True):
@@ -1390,6 +1362,10 @@ def interpret_tier1(
                     next_bc_idx = target_bc_idx
 
         elif bytecode == Bytecodes.jump_on_false_pop:
+            if is_hybrid():
+                if method._counts[current_bc_idx] > TRACE_THRESHOLD and tstack.t_is_empty():
+                    raise ContinueInTier2(method, frame, stack, current_bc_idx)
+                method.incr_count(current_bc_idx)
             target_bc_idx = current_bc_idx + method.get_bytecode(current_bc_idx + 1)
             if we_are_jitted():
                 if _is_false_object(current_bc_idx, next_bc_idx,  method, frame, stack, dummy=True):
@@ -1438,6 +1414,10 @@ def interpret_tier1(
                 # )
 
         elif bytecode == Bytecodes.jump_if_greater:
+            if is_hybrid():
+                if method._counts[current_bc_idx] > TRACE_THRESHOLD and tstack.t_is_empty():
+                    raise ContinueInTier2(method, frame, stack, current_bc_idx)
+                method.incr_count(current_bc_idx)
             target_bc_idx = current_bc_idx + method.get_bytecode(current_bc_idx + 1)
 
             if we_are_jitted():
@@ -1451,6 +1431,10 @@ def interpret_tier1(
                     next_bc_idx = target_bc_idx
 
         elif bytecode == Bytecodes.jump2:
+            if is_hybrid():
+                if method._counts[current_bc_idx] > TRACE_THRESHOLD and tstack.t_is_empty():
+                    raise ContinueInTier2(method, frame, stack, current_bc_idx)
+                method.incr_count(current_bc_idx)
             target_bc_idx = (
                 current_bc_idx
                 + method.get_bytecode(current_bc_idx + 1)
@@ -1460,6 +1444,10 @@ def interpret_tier1(
             next_bc_idx = target_bc_idx
 
         elif bytecode == Bytecodes.jump2_on_true_top_nil:
+            if is_hybrid():
+                if method._counts[current_bc_idx] > TRACE_THRESHOLD and tstack.t_is_empty():
+                    raise ContinueInTier2(method, frame, stack, current_bc_idx)
+                method.incr_count(current_bc_idx)
             target_bc_idx = (
                 current_bc_idx
                 + method.get_bytecode(current_bc_idx + 1)
@@ -1478,6 +1466,10 @@ def interpret_tier1(
                     stack.push(nilObject)
 
         elif bytecode == Bytecodes.jump2_on_false_top_nil:
+            if is_hybrid():
+                if method._counts[current_bc_idx] > TRACE_THRESHOLD and tstack.t_is_empty():
+                    raise ContinueInTier2(method, frame, stack, current_bc_idx)
+                method.incr_count(current_bc_idx)
             target_bc_idx = (
                 current_bc_idx
                 + method.get_bytecode(current_bc_idx + 1)
@@ -1496,6 +1488,10 @@ def interpret_tier1(
                     stack.push(nilObject)
 
         elif bytecode == Bytecodes.jump2_on_true_pop:
+            if is_hybrid():
+                if method._counts[current_bc_idx] > TRACE_THRESHOLD and tstack.t_is_empty():
+                    raise ContinueInTier2(method, frame, stack, current_bc_idx)
+                method.incr_count(current_bc_idx)
             target_bc_idx = (
                 current_bc_idx
                 + method.get_bytecode(current_bc_idx + 1)
@@ -1512,6 +1508,10 @@ def interpret_tier1(
                     next_bc_idx = target_bc_idx
 
         elif bytecode == Bytecodes.jump2_on_false_pop:
+            if is_hybrid():
+                if method._counts[current_bc_idx] > TRACE_THRESHOLD and tstack.t_is_empty():
+                    raise ContinueInTier2(method, frame, stack, current_bc_idx)
+                method.incr_count(current_bc_idx)
             target_bc_idx = (
                 current_bc_idx
                 + method.get_bytecode(current_bc_idx + 1)
@@ -1528,6 +1528,10 @@ def interpret_tier1(
                     next_bc_idx = target_bc_idx
 
         elif bytecode == Bytecodes.jump2_if_greater:
+            if is_hybrid():
+                if method._counts[current_bc_idx] > TRACE_THRESHOLD and tstack.t_is_empty():
+                    raise ContinueInTier2(method, frame, stack, current_bc_idx)
+                method.incr_count(current_bc_idx)
             target_bc_idx = (
                 current_bc_idx
                 + method.get_bytecode(current_bc_idx + 1)

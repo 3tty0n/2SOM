@@ -1,4 +1,4 @@
-TRACE_THRESHOLD = 1039 / 3
+TRACE_THRESHOLD = 1039
 
 
 class ContinueInTier1(Exception):
