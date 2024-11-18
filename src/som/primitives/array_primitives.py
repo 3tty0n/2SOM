@@ -6,6 +6,7 @@ from som.vmobjects.primitive import UnaryPrimitive, BinaryPrimitive, TernaryPrim
 from som.vmobjects.method import AbstractMethod
 from som.primitives.primitives import Primitives
 
+from som.tier_type import is_tier1
 
 if is_ast_interpreter():
     from som.vmobjects.block_ast import AstBlock as _Block
@@ -58,7 +59,10 @@ def _do_indexes(rcvr, block):
     length = rcvr.get_number_of_indexable_fields()
     while i <= length:  # the i is propagated to Smalltalk, so, start with 1
         do_index_driver.jit_merge_point(block_method=block_method)
-        block_method.invoke_2(block, Integer(i))
+        if is_tier1():
+            block_method.invoke_2(block, Integer(i))
+        else:
+            block_method.invoke_2_tier2(block, Integer(i))
         i += 1
 
 
@@ -81,7 +85,10 @@ def _do(rcvr, block):
     length = rcvr.get_number_of_indexable_fields()
     while i < length:  # the array itself is zero indexed
         do_driver.jit_merge_point(block_method=block_method)
-        block_method.invoke_2(block, rcvr.get_indexable_field(i))
+        if is_tier1():
+            block_method.invoke_2(block, rcvr.get_indexable_field(i))
+        else:
+            block_method.invoke_2_tier2(block, rcvr.get_indexable_field(i))
         i += 1
 
 
