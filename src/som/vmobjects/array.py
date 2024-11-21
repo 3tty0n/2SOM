@@ -3,7 +3,7 @@ from rlib.erased import new_erasing_pair
 from rlib.jit import JitDriver
 from rlib.debug import make_sure_not_resized
 
-from som.tier_type import is_tier2
+from som.tier_type import is_tier2, is_hybrid
 
 from som.vmobjects.abstract_object import AbstractObject
 from som.vm.globals import nilObject, falseObject, trueObject
@@ -138,9 +138,13 @@ class _ArrayStrategy(object):
     def _set_remaining_with_block_as_nil(array, block, size, next_i):
         block_method = block.get_method()
         while next_i < size:
-            if is_tier2():
+            if is_tier2() or is_hybrid():
                 put_all_nil_driver.jit_merge_point(block_method=block_method)
-            result = block_method.invoke_1(block)
+
+            if is_tier2() or is_hybrid():
+                result = block_method.invoke_1_tier2(block)
+            else:
+                result = block_method.invoke_1(block)
             if result is not nilObject:
                 # ok, fall back, let's go straight to obj strategy
                 # todo: perhaps, partially empty would be better?
@@ -158,9 +162,13 @@ class _ArrayStrategy(object):
     def _set_remaining_with_block_as_long(array, block, size, next_i, storage):
         block_method = block.get_method()
         while next_i < size:
-            if is_tier2():
+            if is_tier2() or is_hybrid():
                 put_all_long_driver.jit_merge_point(block_method=block_method)
-            result = block_method.invoke_1(block)
+
+            if is_tier2() or is_hybrid():
+                result = block_method.invoke_1_tier2(block)
+            else:
+                result = block_method.invoke_1(block)
             if isinstance(result, Integer):
                 storage[next_i] = result.get_embedded_integer()
             else:
@@ -180,9 +188,13 @@ class _ArrayStrategy(object):
     def _set_remaining_with_block_as_double(array, block, size, next_i, storage):
         block_method = block.get_method()
         while next_i < size:
-            if is_tier2():
+            if is_tier2() or is_hybrid():
                 put_all_double_driver.jit_merge_point(block_method=block_method)
-            result = block_method.invoke_1(block)
+
+            if is_tier2() or is_hybrid():
+                result = block_method.invoke_1_tier2(block)
+            else:
+                result = block_method.invoke_1(block)
             if isinstance(result, Double):
                 storage[next_i] = result.get_embedded_double()
             else:
@@ -202,9 +214,13 @@ class _ArrayStrategy(object):
     def _set_remaining_with_block_as_bool(array, block, size, next_i, storage):
         block_method = block.get_method()
         while next_i < size:
-            if is_tier2():
+            if is_tier2() or is_hybrid():
                 put_all_bool_driver.jit_merge_point(block_method=block_method)
-            result = block_method.invoke_1(block)
+
+            if is_tier2() or is_hybrid():
+                result = block_method.invoke_1_tier2(block)
+            else:
+                result = block_method.invoke_1(block)
             if result is trueObject or result is falseObject:
                 storage[next_i] = result is trueObject
             else:
@@ -225,7 +241,7 @@ class _ArrayStrategy(object):
         block_method = block.get_method()
 
         while next_i < size:
-            if is_tier2():
+            if is_tier2() or is_hybrid():
                 put_all_obj_driver.jit_merge_point(block_method=block_method)
             storage[next_i] = block_method.invoke_1(block)
             next_i += 1
