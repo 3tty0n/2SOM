@@ -21,10 +21,10 @@ from som.interpreter.bc.hints import (
     enable_shallow_tracing_argn,
     enable_shallow_tracing_with_value,
 )
-from som.interpreter.bc.tier_shifting import TRACE_THRESHOLD, ContinueInTier1, ContinueInTier2
+from som.interpreter.bc.tier_shifting import ContinueInTier1, ContinueInTier2, tier_manager
 from som.interpreter.control_flow import ReturnException
 from som.interpreter.send import lookup_and_send_2, lookup_and_send_3, lookup_and_send_2_tier2, lookup_and_send_3_tier2
-from som.tier_type import is_hybrid, is_tier1, is_tier2, tier_manager
+from som.tier_type import is_hybrid, is_tier1, is_tier2
 from som.vm.globals import nilObject, trueObject, falseObject
 from som.vmobjects.array import Array
 from som.vmobjects.block_bc import BcBlock
@@ -39,6 +39,9 @@ from rlib.jit import (
     we_are_jitted,
     dont_look_inside
 )
+
+
+TRACE_THRESHOLD = tier_manager.get_threshold()
 
 
 class Stack(object):
@@ -1006,7 +1009,6 @@ def interpret_tier1(
             _pop_field_1(current_bc_idx, next_bc_idx, method, frame, stack)
 
         elif bytecode == Bytecodes.send_1:
-
             if we_are_jitted():
                 rcvr_type = method.get_receiver_type(current_bc_idx)
                 if rcvr_type is None:

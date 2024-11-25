@@ -1,4 +1,18 @@
-TRACE_THRESHOLD = 1039
+class _TierManager(object):
+
+    _HYBRID_THRESHOLD = 23
+
+    def set_tier(self, tier):
+        self._CURRENT_TIER = tier
+
+    def set_threshold(self, value):
+        self._HYBRID_THRESHOLD = value
+
+    def get_threshold(self):
+        return self._HYBRID_THRESHOLD
+
+
+tier_manager = _TierManager()
 
 
 class ContinueInTier1(Exception):

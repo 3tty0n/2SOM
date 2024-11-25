@@ -11,7 +11,8 @@ from rpython.memory.gc.hook import GcHooks
 
 from som.compiler.parse_error import ParseError
 from som.interp_type import is_ast_interpreter, is_bytecode_interpreter
-from som.tier_type import is_hybrid, is_tier1, is_tier2, tier_manager
+from som.tier_type import is_hybrid, is_tier1, is_tier2
+from som.interpreter.bc.tier_shifting import tier_manager
 from som.vm.universe import main, Exit
 
 try:
@@ -96,6 +97,7 @@ def report_gc_stats():
 
 
 def entry_point(argv):
+    from som.interpreter.bc.tier_shifting import tier_manager
     is_gc_stats = False
 
     i = 0
@@ -108,7 +110,11 @@ def entry_point(argv):
                 print("missing argument after --jit")
                 return 2
             jitarg = argv[i + 1]
-            jit.set_user_param(None, jitarg)
+            if 'hybrid_threshold=' in jitarg:
+                jitvalue = int(jitarg.split('=')[1])
+                tier_manager.set_threshold(jitvalue)
+            else:
+                jit.set_user_param(None, jitarg)
             del argv[i : i + 2]
             continue
         elif argv[i] == '--hybrid_threshold':

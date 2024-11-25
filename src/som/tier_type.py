@@ -37,25 +37,3 @@ def is_tier2():
 @jit.elidable
 def is_hybrid():
     return _INTERP_TYPE == _HYBRID
-
-
-class _TierManager(object):
-
-    _CURRENT_TIER = 1
-    _HYBRID_THRESHOLD = 1039
-
-    def set_tier(self, tier):
-        self._CURRENT_TIER = tier
-
-
-    def tier_gt(self, val):
-        return self._CURRENT_TIER > val
-
-    def set_threshold(self, value):
-        self._HYBRID_THRESHOLD = value
-
-    def get_threshold(self):
-        return self._HYBRID_THRESHOLD
-
-
-tier_manager = _TierManager()
