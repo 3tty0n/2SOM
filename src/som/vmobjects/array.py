@@ -243,7 +243,9 @@ class _ArrayStrategy(object):
         while next_i < size:
             if is_tier2() or is_hybrid():
                 put_all_obj_driver.jit_merge_point(block_method=block_method)
-            storage[next_i] = block_method.invoke_1(block)
+                storage[next_i] = block_method.invoke_1_tier2(block)
+            else:
+                storage[next_i] = block_method.invoke_1(block)
             next_i += 1
 
         array.strategy = _obj_strategy
