@@ -77,7 +77,7 @@ def _to_do_double(i, by_increment, top, block, block_method):
     assert isinstance(i, int)
     assert isinstance(top, float)
     while i <= top:
-        if is_hybrid():
+        if is_tier2() or is_hybrid():
             jitdriver_double.jit_merge_point(block_method=block_method)
 
         if is_tier1():
@@ -162,7 +162,7 @@ def _down_to_do_int(i, by_increment, bottom, block, block_method):
     assert isinstance(i, int)
     assert isinstance(bottom, int)
     while i >= bottom:
-        if is_hybrid():
+        if is_tier2() or is_hybrid():
             jitdriver_int_down.jit_merge_point(block_method=block_method)
 
         if is_tier1():
@@ -176,7 +176,7 @@ def _down_to_do_double(i, by_increment, bottom, block, block_method):
     assert isinstance(i, int)
     assert isinstance(bottom, float)
     while i >= bottom:
-        if is_hybrid():
+        if is_tier2() or is_hybrid():
             jitdriver_double_down.jit_merge_point(block_method=block_method)
 
         if is_tier1():
