@@ -46,7 +46,7 @@ test: compile
 
 clean:
 	@-rm som-ast-jit som-ast-interp
-	@-rm som-bc-jit  som-bc-interp
+	@-rm som-bc-jit  som-bc-interp som-bc-jit-tier1 som-bc-jit-tier2 som-bc-jit-hybrid
 
 core-lib/.git:
 	git submodule update --init
