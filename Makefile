@@ -47,6 +47,8 @@ som-jit: som-ast-jit som-bc-jit
 
 som-bc-jit: som-bc-jit-tier1 som-bc-jit-tier2 som-bc-jit-hybrid
 
+som-bc-jit-tier1-evaluation: som-bc-jit-tier1-no-ic som-bc-jit-tier1-no-ic-no-handler-opt
+
 test: compile
 	PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) nosetests
 	if [ -e ./som-ast-jit    ]; then ./som-ast-jit    -cp Smalltalk TestSuite/TestHarness.som; fi
@@ -57,6 +59,7 @@ test: compile
 clean:
 	@-rm som-ast-jit som-ast-interp
 	@-rm som-bc-jit  som-bc-interp som-bc-jit-tier1 som-bc-jit-tier2 som-bc-jit-hybrid
+	@-rm som-bc-jit-tier1-no-ic som-bc-jit-tier1-no-ic-no-handler-opt
 
 core-lib/.git:
 	git submodule update --init
