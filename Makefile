@@ -25,7 +25,7 @@ som-bc-jit-tier1-no-ic: core-lib/.git
 	SOM_TIER=4 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
 
 som-bc-jit-tier1-no-ic-no-handler-opt: core-lib/.git
-	SOM_TIER=1 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
+	SOM_TIER=5 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
 
 som-bc-jit-tier2: core-lib/.git
 	SOM_TIER=2 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
