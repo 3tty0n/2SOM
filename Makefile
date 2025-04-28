@@ -1,7 +1,9 @@
 #!/usr/bin/env make -f
 
 JOBS=$(subst -j,--make-jobs ,$(filter -j%, $(MAKEFLAGS)))
+RTIME_EXT_DIR ?= site-packages/rtime_ext
 PYPY_DIR ?= pypy
+PYPY_NO_HO_DIR ?= pypy-no-handler-opt
 RPYTHON  ?= $(PYPY_DIR)/rpython/bin/rpython $(JOBS)
 RPYTHON_ARGS ?= # --lldebug
 SOM_TIER=1
@@ -13,35 +15,37 @@ all: compile
 compile: som-bc-interp som-bc-jit-tier1 som-bc-jit-tier2 som-bc-jit-hybrid
 
 som-ast-jit: core-lib/.git
-	SOM_INTERP=AST PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
+	SOM_INTERP=AST PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR):$(RTIME_EXT_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
 
 som-bc-jit:	core-lib/.git
-	SOM_TIER=$(SOM_TIER) SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
+	SOM_TIER=$(SOM_TIER) SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR):$(RTIME_EXT_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
 
 som-bc-jit-tier1: core-lib/.git
-	SOM_TIER=1 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
+	SOM_TIER=1 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR):$(RTIME_EXT_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
 
 som-bc-jit-tier1-no-ic: core-lib/.git
-	SOM_TIER=4 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
+	SOM_TIER=4 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_NO_HO_DIR):$(RTIME_EXT_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
 
 som-bc-jit-tier1-no-ic-no-handler-opt: core-lib/.git
-	SOM_TIER=5 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
+	SOM_TIER=5 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_NO_HO_DIR):$(RTIME_EXT_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
 
 som-bc-jit-tier2: core-lib/.git
-	SOM_TIER=2 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
+	SOM_TIER=2 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR):$(RTIME_EXT_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
 
 som-bc-jit-hybrid: core-lib/.git
-	SOM_TIER=3 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
+	SOM_TIER=3 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR):$(RTIME_EXT_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
 
 som-ast-interp: core-lib/.git
-	SOM_INTERP=AST PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) $(RPYTHON_ARG) --batch src/main_rpython.py
+	SOM_INTERP=AST PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON):$(RTIME_EXT_DIR) $(RPYTHON_ARG) --batch src/main_rpython.py
 
 som-bc-interp: core-lib/.git
-	SOM_TIER=1 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) $(RPYTHON_ARG) --batch src/main_rpython.py
+	SOM_TIER=1 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR):$(RTIME_EXT_DIR) $(RPYTHON) $(RPYTHON_ARG) --batch src/main_rpython.py
 
 som-interp: som-ast-interp som-bc-interp
 
 som-jit: som-ast-jit som-bc-jit
+
+som-bc-jit: som-bc-jit-tier1 som-bc-jit-tier2 som-bc-jit-hybrid
 
 test: compile
 	PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) nosetests
