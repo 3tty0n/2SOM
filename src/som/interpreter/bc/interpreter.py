@@ -19,7 +19,7 @@ from som.interpreter.bc.tier_shifting import ContinueInTier1, ContinueInTier2
 from som.interpreter.bc.traverse_stack import t_empty, t_dump, t_push
 from som.interpreter.control_flow import ReturnException
 from som.interpreter.send import lookup_and_send_2, lookup_and_send_3, lookup_and_send_2_tier2, lookup_and_send_3_tier2
-from som.tier_type import is_hybrid, is_tier1, is_tier2
+from som.tier_type import is_hybrid, is_tier1, is_tier2, is_tier1_no_ic, is_tier1_no_ic_no_ho
 from som.vm.globals import nilObject, trueObject, falseObject
 from som.vmobjects.array import Array
 from som.vmobjects.block_bc import BcBlock
@@ -46,13 +46,19 @@ def interpret(method, frame, max_stack_size, dummy=False):
     In the whle loop we can define the rule to shift the compilation timer.
     Movement from interpreter to interpreter is implemented using exceptions.
     """
-    from som.interpreter.bc.interpreter_tier1 import interpret_tier1
+    if is_tier1_no_ic():
+        from som.interpreter.bc.interpreter_tier1_no_ic import interpret_tier1
+    else:
+        from som.interpreter.bc.interpreter_tier1 import interpret_tier1
     from som.interpreter.bc.interpreter_tier2 import interpret_tier2
 
     if dummy:
         return
 
     if is_tier1():
+        w_result = interpret_tier1(method, frame, max_stack_size)
+        return w_result
+    elif is_tier1_no_ic():
         w_result = interpret_tier1(method, frame, max_stack_size)
         return w_result
     elif is_tier2():

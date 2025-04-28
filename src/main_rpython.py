@@ -11,7 +11,7 @@ from rpython.memory.gc.hook import GcHooks
 
 from som.compiler.parse_error import ParseError
 from som.interp_type import is_ast_interpreter, is_bytecode_interpreter
-from som.tier_type import is_hybrid, is_tier1, is_tier2
+from som.tier_type import is_hybrid, is_tier1, is_tier2,is_tier1_no_ic, is_tier1_no_ic_no_ho
 from som.interpreter.bc.tier_shifting import tier_manager
 from som.vm.universe import main, Exit
 
@@ -161,6 +161,10 @@ def target(driver, _args):
 
     if is_tier1():
         exe_name += "tier1"
+    elif is_tier1_no_ic():
+        exe_name += "tier1-no-ic"
+    elif is_tier1_no_ic_no_ho():
+        exe_name += "tier1-no-ic-no-handler-opt"
     elif is_tier2():
         exe_name += "tier2"
     elif is_hybrid():
