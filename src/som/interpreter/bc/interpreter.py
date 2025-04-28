@@ -48,6 +48,8 @@ def interpret(method, frame, max_stack_size, dummy=False):
     """
     if is_tier1_no_ic():
         from som.interpreter.bc.interpreter_tier1_no_ic import interpret_tier1
+    elif is_tier1_no_ic_no_ho():
+        from som.interpreter.bc.interpreter_tier1_no_ic_no_handler_opt import interpret_tier1
     else:
         from som.interpreter.bc.interpreter_tier1 import interpret_tier1
     from som.interpreter.bc.interpreter_tier2 import interpret_tier2
@@ -58,7 +60,7 @@ def interpret(method, frame, max_stack_size, dummy=False):
     if is_tier1():
         w_result = interpret_tier1(method, frame, max_stack_size)
         return w_result
-    elif is_tier1_no_ic():
+    elif is_tier1_no_ic() or is_tier1_no_ic_no_ho():
         w_result = interpret_tier1(method, frame, max_stack_size)
         return w_result
     elif is_tier2():
