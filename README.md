@@ -26,7 +26,7 @@ To build 2SOM, please follow the following command.
 ```shell
 $ git clone https://github.com/3tty0n/2SOM.git
 $ cd 2SOM
-$ git clone https://github.com/3tty0n/pypy.git
+$ git clone https://github.com/3tty0n/pypy.git -b branches/threaded-code-generation
 $ mkdir site-packages && cd site-packages
 $ git clone https://github.com/3tty0n/rtime_ext.git
 $ cd ..
