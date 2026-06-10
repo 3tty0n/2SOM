@@ -57,6 +57,11 @@ class FakeMethod(object):
         self.runs.append(hybrid)
         return "ok"
 
+    def _run_profiling(self, frame, max_stack_size):
+        # profile-gate activations run inline in the shared interpreter
+        self.runs.append(adaptive.MODE_INLINE)
+        return "ok"
+
 
 def _reset_cfg():
     # restore shipped defaults (tests mutate _t4cfg)
@@ -77,6 +82,9 @@ def _reset_cfg():
     adaptive._t4cfg.warm_enabled = 0
     adaptive._t4cfg.promote_inv = 64
     adaptive._t4cfg.promote_ops = 8192
+    # pin the warm-era clock so tests never cross the startup deadline
+    adaptive._t4cfg.warm_era = 1e9
+    adaptive._t4state.start_time = adaptive._rtime()
 
 
 # --- selector classification ----------------------------------------------------

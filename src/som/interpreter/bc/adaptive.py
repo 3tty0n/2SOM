@@ -79,6 +79,12 @@ class _T4Cfg(object):
         #   startup 1.007; ops=32768/inv=256 -> exp ~0.79 but startup 1.03 / DeltaBlue 1.25.
         self.promote_inv = 64     # SOM_T4_PROMOTE_INV: warm activations before promotion
         self.promote_ops = 8192   # SOM_T4_PROMOTE_OPS: warm residual sends before promotion
+        # Warm is a STARTUP tier: after warm_era seconds of process runtime every warm
+        # entry promotes immediately and new decisions commit directly. Without the
+        # deadline, low-traffic warm methods linger and steady-hot traces compiled
+        # meanwhile bake in adaptive_tier==2 guards/barrier calls on non-constant
+        # paths that never heal (DeltaBlue steady 1.2x at 100 iterations).
+        self.warm_era = 0.4       # SOM_T4_WARM_ERA_MS / 1000.0
 
 
 _t4cfg = _T4Cfg()
@@ -93,6 +99,7 @@ _t4cfg = _T4Cfg()
 class _T4State(object):
     def __init__(self):
         self.profiling = 0   # >0 while a profile-gate activation is running
+        self.start_time = 0.0  # process start (set by _t4_configure); warm-era anchor
         self.d_layout = 0    # diag: _profile_layout calls
         self.d_overflow = 0  # diag: inline-cache overflows observed
         self.d_gate = 0      # diag: profile-gate activations
@@ -140,7 +147,16 @@ def _t4_configure():
     _t4cfg.warm_enabled = _env_int("SOM_T4_WARM", _t4cfg.warm_enabled)
     _t4cfg.promote_inv = _env_int("SOM_T4_PROMOTE_INV", _t4cfg.promote_inv)
     _t4cfg.promote_ops = _env_int("SOM_T4_PROMOTE_OPS", _t4cfg.promote_ops)
+    _t4cfg.warm_era = _env_int("SOM_T4_WARM_ERA_MS", int(_t4cfg.warm_era * 1000)) / 1000.0
     _t4cfg.debug = _env_int("SOM_T4_DEBUG", _t4cfg.debug)
+    _t4state.start_time = _rtime()
+
+
+def _warm_era_over():
+    # Warm is a startup tier; past the era every warm entry promotes immediately
+    # and new decisions commit directly. Called only off-trace on warm/decision
+    # paths, so the clock read costs nothing on committed steady state.
+    return _rtime() - _t4state.start_time > _t4cfg.warm_era
 
 
 def _t4_dbg(method, tier, reason):
@@ -392,13 +408,15 @@ def _promote_warm(method, reason):
     _t4_dbg(method, 3, "warm-" + reason)
 
 
+@jit.dont_look_inside
 def warm_callee_invocation(method):
-    """Count one activation of a warm method reached through a residual send. Such
-    dispatch bypasses the controller, so without this a method only ever called from
-    warm code would never promote. Shares warm_invocations/promote_inv."""
+    """Count one activation of a warm method reached outside the controller (residual
+    sends, and inline-path invokes from committed code). Both bypass the controller,
+    so without this a method only ever called there would never promote. Opaque so
+    the counter never pollutes a trace. Shares warm_invocations/promote_inv."""
     n = method.warm_invocations + 1
     method.warm_invocations = n
-    if n >= _t4cfg.promote_inv:
+    if n >= _t4cfg.promote_inv or _warm_era_over():
         _promote_warm(method, "inv")
 
 
@@ -431,8 +449,9 @@ def _adaptive_tier4(method, frame, max_stack_size):
     if committed == 2:
         # WARM: run the stack-inliner mode and count the activation toward promotion
         # (warm_residual_op promotes single-activation hot loops independently).
+        # Past the warm era, promote immediately (warm is a startup tier).
         method.warm_invocations += 1
-        if method.warm_invocations >= _t4cfg.promote_inv:
+        if method.warm_invocations >= _t4cfg.promote_inv or _warm_era_over():
             _promote_warm(method, "inv")
             at = method.adaptive_tier
             return method._run_tier3(
@@ -459,7 +478,9 @@ def _adaptive_tier4(method, frame, max_stack_size):
             _t4state.d_gatejit += 1
         _t4state.profiling += 1
         try:
-            return method._run_tier3(frame, max_stack_size, MODE_INLINE)
+            # _run_profiling forces the SHARED interpreter (profiling hooks live
+            # there); plain MODE_INLINE now routes to the lean tier-3 graph.
+            return method._run_profiling(frame, max_stack_size)
         finally:
             _t4state.profiling -= 1
 
@@ -484,7 +505,7 @@ def _adaptive_tier4(method, frame, max_stack_size):
     # 2) monomorphic -> nothing to residualise. With the warm phase on, commit tier 2
     #    first and let _promote_warm re-decide 3-vs-4 once hot; off, commit tier 3 directly.
     if not _has_mixed_operand_profile(method):
-        if _t4cfg.warm_enabled:
+        if _t4cfg.warm_enabled and not _warm_era_over():
             method.adaptive_tier = 2
             _t4_dbg(method, 2, "warm-mono-operand")
             return method._run_tier3(frame, max_stack_size, MODE_INLINER)
@@ -492,7 +513,7 @@ def _adaptive_tier4(method, frame, max_stack_size):
         _t4_dbg(method, 3, "mono-operand")
         return method._run_tier3(frame, max_stack_size, MODE_INLINE)
     if not _has_mixed_cmp_profile(method):
-        if _t4cfg.warm_enabled:
+        if _t4cfg.warm_enabled and not _warm_era_over():
             method.adaptive_tier = 2
             _t4_dbg(method, 2, "warm-mono-cmp")
             return method._run_tier3(frame, max_stack_size, MODE_INLINER)
