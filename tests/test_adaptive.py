@@ -48,6 +48,7 @@ class FakeMethod(object):
         self.t4_min = 0.0
         self.t3_n = 0
         self.t4_n = 0
+        self.warm_epoch = 0
         self.runs = []          # records (hybrid) of each _run_tier3 call
 
     def get_number_of_bytecodes(self):
@@ -85,6 +86,9 @@ def _reset_cfg():
     # pin the warm-era clock so tests never cross the startup deadline
     adaptive._t4cfg.warm_era = 1e9
     adaptive._t4state.start_time = adaptive._rtime()
+    adaptive._t4cfg.warm_drain_age = 10**9
+    adaptive._t4state.decisions = 0
+    adaptive._t4state.warm_list = []
 
 
 # --- selector classification ----------------------------------------------------
@@ -290,6 +294,24 @@ def test_warm_promotes_by_callee_invocations():
     assert m.adaptive_tier == 2                  # below promote_inv
     adaptive.warm_callee_invocation(m)           # 3rd callee activation -> promote
     assert m.adaptive_tier == 3                  # monomorphic profile -> inline
+
+
+def test_warm_straggler_drained_by_decisions():
+    # A warm method whose own entries stop must still promote once the drain
+    # clock (controller decision passes) moves warm_drain_age past its commit.
+    _reset_cfg()
+    adaptive._t4cfg.warm_enabled = 1
+    adaptive._t4cfg.warm_drain_age = 2
+    straggler = FakeMethod(5)
+    straggler.adaptive_tier = 2
+    straggler.warm_epoch = adaptive._t4state.decisions
+    adaptive._t4state.warm_list.append(straggler)
+    adaptive._tick_decision()
+    adaptive._tick_decision()
+    assert straggler.adaptive_tier == 2      # within drain age
+    adaptive._tick_decision()                # decisions - epoch > 2 -> drain
+    assert straggler.adaptive_tier == 3
+    assert straggler not in adaptive._t4state.warm_list
 
 
 def test_warm_promotion_honours_mega_profile():

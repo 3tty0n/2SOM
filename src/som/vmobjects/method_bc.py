@@ -137,6 +137,7 @@ class BcAbstractMethod(AbstractMethod):
         # loop still reaches the threshold mid-loop).
         self.warm_invocations = 0
         self.warm_ops = 0
+        self.warm_epoch = 0             # drain clock value at warm commit
         self.ab_round = 0               # A/B round counter (even=tier3, odd=tier4)
         self.t3_min = 0.0               # best-of-min timing for tier 3 (inline)
         self.t4_min = 0.0               # best-of-min timing for tier 4 (hybrid)

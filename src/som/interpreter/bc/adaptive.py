@@ -85,6 +85,13 @@ class _T4Cfg(object):
         # meanwhile bake in adaptive_tier==2 guards/barrier calls on non-constant
         # paths that never heal (DeltaBlue steady 1.2x at 100 iterations).
         self.warm_era = 0.4       # SOM_T4_WARM_ERA_MS / 1000.0
+        # Straggler drain: a warm method older than this many controller DECISIONS
+        # promotes at the next decision pass. Low-traffic methods otherwise stay
+        # warm forever (their entries stop before promote_inv), and warm-history
+        # exposure perturbs the shape of steady traces (DeltaBlue deep-steady 1.2x
+        # at age 48 vs tier3 parity at 8; experiments unaffected). Decision count,
+        # not wall clock, so it tracks workload progress.
+        self.warm_drain_age = 8   # SOM_T4_DRAIN_AGE
 
 
 _t4cfg = _T4Cfg()
@@ -100,6 +107,8 @@ class _T4State(object):
     def __init__(self):
         self.profiling = 0   # >0 while a profile-gate activation is running
         self.start_time = 0.0  # process start (set by _t4_configure); warm-era anchor
+        self.decisions = 0   # controller decision passes (drain clock)
+        self.warm_list = []  # methods currently committed warm (drain registry)
         self.d_layout = 0    # diag: _profile_layout calls
         self.d_overflow = 0  # diag: inline-cache overflows observed
         self.d_gate = 0      # diag: profile-gate activations
@@ -148,6 +157,7 @@ def _t4_configure():
     _t4cfg.promote_inv = _env_int("SOM_T4_PROMOTE_INV", _t4cfg.promote_inv)
     _t4cfg.promote_ops = _env_int("SOM_T4_PROMOTE_OPS", _t4cfg.promote_ops)
     _t4cfg.warm_era = _env_int("SOM_T4_WARM_ERA_MS", int(_t4cfg.warm_era * 1000)) / 1000.0
+    _t4cfg.warm_drain_age = _env_int("SOM_T4_DRAIN_AGE", _t4cfg.warm_drain_age)
     _t4cfg.debug = _env_int("SOM_T4_DEBUG", _t4cfg.debug)
     _t4state.start_time = _rtime()
 
@@ -408,6 +418,33 @@ def _promote_warm(method, reason):
     _t4_dbg(method, 3, "warm-" + reason)
 
 
+def _tick_decision():
+    """One controller decision pass: advance the drain clock and promote warm
+    STRAGGLERS -- methods whose warm commit is older than warm_drain_age
+    decisions. Their own entries stop before promote_inv, so without the drain
+    they stay warm forever and steady-hot traces keep inlined-warm copies of
+    them. Runs off-trace in the controller; the registry stays small."""
+    _t4state.decisions += 1
+    if len(_t4state.warm_list) == 0:
+        return
+    kept = []
+    for m in _t4state.warm_list:
+        if m.adaptive_tier != 2:
+            continue  # promoted by count/era meanwhile
+        if _t4state.decisions - m.warm_epoch > _t4cfg.warm_drain_age:
+            _promote_warm(m, "drain")
+        else:
+            kept.append(m)
+    _t4state.warm_list = kept
+
+
+def _enter_warm(method):
+    """Commit `method` to the warm tier and register it for the straggler drain."""
+    method.adaptive_tier = 2
+    method.warm_epoch = _t4state.decisions
+    _t4state.warm_list.append(method)
+
+
 @jit.dont_look_inside
 def warm_callee_invocation(method):
     """Count one activation of a warm method reached outside the controller (residual
@@ -494,6 +531,8 @@ def _adaptive_tier4(method, frame, max_stack_size):
                  + " layoutCalls=" + str(_t4state.d_layout)
                  + " overflows=" + str(_t4state.d_overflow) + " gate=" + str(_t4state.d_gate) + " gateJitted=" + str(_t4state.d_gatejit) + "\n")
 
+    _tick_decision()
+
     # 1b) deeply-megamorphic site (>= mega_floor distinct classes) -> commit tier 4 so the
     #     site is residualised opaquely (O(1) dispatch vs tier 3's per-class bridge chain).
     if _t4cfg.mega_enabled and _has_mega_site(method):
@@ -506,7 +545,7 @@ def _adaptive_tier4(method, frame, max_stack_size):
     #    first and let _promote_warm re-decide 3-vs-4 once hot; off, commit tier 3 directly.
     if not _has_mixed_operand_profile(method):
         if _t4cfg.warm_enabled and not _warm_era_over():
-            method.adaptive_tier = 2
+            _enter_warm(method)
             _t4_dbg(method, 2, "warm-mono-operand")
             return method._run_tier3(frame, max_stack_size, MODE_INLINER)
         method.adaptive_tier = 3
@@ -514,7 +553,7 @@ def _adaptive_tier4(method, frame, max_stack_size):
         return method._run_tier3(frame, max_stack_size, MODE_INLINE)
     if not _has_mixed_cmp_profile(method):
         if _t4cfg.warm_enabled and not _warm_era_over():
-            method.adaptive_tier = 2
+            _enter_warm(method)
             _t4_dbg(method, 2, "warm-mono-cmp")
             return method._run_tier3(frame, max_stack_size, MODE_INLINER)
         method.adaptive_tier = 3
