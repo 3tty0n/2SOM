@@ -13,7 +13,6 @@ try:
     from rpython.rlib.jit import emit_ret  # pylint: disable=unused-import
     from rpython.rlib.jit import begin_slow_path  # pylint: disable=unused-import
     from rpython.rlib.jit import end_slow_path  # pylint: disable=unused-import
-    from rpython.rlib.jit import call_assembler  # pylint: disable=unused-import
 except ImportError:
     "NOT_RPYTHON"
 
@@ -86,5 +85,24 @@ except ImportError:
     def end_slow_path():
         pass
 
+
+# call_assembler / we_are_blackholing are imported in their own blocks: they are
+# absent from some pypy checkouts, and keeping them separate stops one missing symbol
+# from collapsing every jit import to a no-op stub.
+try:
+    from rpython.rlib.jit import call_assembler  # pylint: disable=unused-import
+except ImportError:
+    "NOT_RPYTHON"
+
     def call_assembler(func):
         return func
+
+
+try:
+    from rpython.rlib.jit import we_are_blackholing  # pylint: disable=unused-import
+except ImportError:
+    "NOT_RPYTHON"
+
+    def we_are_blackholing():
+        # no blackhole introspection on this build; treat every run as non-blackhole
+        return False

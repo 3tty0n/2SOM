@@ -12,7 +12,7 @@ SOM_TIER=1
 
 all: compile
 
-compile: som-bc-interp som-bc-jit-tier1 som-bc-jit-tier2 som-bc-jit-hybrid
+compile: som-bc-interp som-bc-jit-tier1 som-bc-jit-tier2 som-bc-jit-tier3 som-bc-jit-tier4 som-bc-jit-hybrid
 
 som-ast-jit: core-lib/.git
 	SOM_INTERP=AST PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR):$(RTIME_EXT_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
@@ -24,16 +24,24 @@ som-bc-jit-tier1: core-lib/.git
 	SOM_TIER=1 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR):$(RTIME_EXT_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
 
 som-bc-jit-tier1-no-ic: core-lib/.git
-	SOM_TIER=4 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_NO_HO_DIR):$(RTIME_EXT_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
+	SOM_TIER=6 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_NO_HO_DIR):$(RTIME_EXT_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
 
 som-bc-jit-tier1-no-ic-no-handler-opt: core-lib/.git
-	SOM_TIER=5 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_NO_HO_DIR):$(RTIME_EXT_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
+	SOM_TIER=7 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_NO_HO_DIR):$(RTIME_EXT_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
 
+# SOM_TIER=2 is now the stack inliner (was the tracing JIT); the tracing JIT is
+# SOM_TIER=3 (som-bc-jit-tier3) and the adaptive hybrid is SOM_TIER=4.
 som-bc-jit-tier2: core-lib/.git
 	SOM_TIER=2 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR):$(RTIME_EXT_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
 
-som-bc-jit-hybrid: core-lib/.git
+som-bc-jit-tier3: core-lib/.git
 	SOM_TIER=3 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR):$(RTIME_EXT_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
+
+som-bc-jit-tier4: core-lib/.git
+	SOM_TIER=4 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR):$(RTIME_EXT_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
+
+som-bc-jit-hybrid: core-lib/.git
+	SOM_TIER=5 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR):$(RTIME_EXT_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
 
 som-ast-interp: core-lib/.git
 	SOM_INTERP=AST PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON):$(RTIME_EXT_DIR) $(RPYTHON_ARG) --batch src/main_rpython.py
@@ -45,7 +53,7 @@ som-interp: som-ast-interp som-bc-interp
 
 som-jit: som-ast-jit som-bc-jit
 
-som-bc-jit: som-bc-jit-tier1 som-bc-jit-tier2 som-bc-jit-hybrid
+som-bc-jit: som-bc-jit-tier1 som-bc-jit-tier2 som-bc-jit-tier3 som-bc-jit-tier4 som-bc-jit-hybrid
 
 som-bc-jit-tier1-evaluation: som-bc-jit-tier1-no-ic som-bc-jit-tier1-no-ic-no-handler-opt
 
@@ -58,7 +66,7 @@ test: compile
 
 clean:
 	@-rm som-ast-jit som-ast-interp
-	@-rm som-bc-jit  som-bc-interp som-bc-jit-tier1 som-bc-jit-tier2 som-bc-jit-hybrid
+	@-rm som-bc-jit  som-bc-interp som-bc-jit-tier1 som-bc-jit-tier2 som-bc-jit-tier3 som-bc-jit-tier4 som-bc-jit-hybrid
 	@-rm som-bc-jit-tier1-no-ic som-bc-jit-tier1-no-ic-no-handler-opt som-bc-interp-tier1
 
 core-lib/.git:
