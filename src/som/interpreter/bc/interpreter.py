@@ -18,8 +18,16 @@ from som.interpreter.bc.frame import (
 from som.interpreter.bc.tier_shifting import ContinueInTier1, ContinueInTier2
 from som.interpreter.bc.traverse_stack import t_empty, t_dump, t_push
 from som.interpreter.control_flow import ReturnException
-from som.interpreter.send import lookup_and_send_2, lookup_and_send_3, lookup_and_send_2_tier2, lookup_and_send_3_tier2
-from som.tier_type import is_hybrid, is_tier1, is_tier2, is_tier1_no_ic, is_tier1_no_ic_no_ho
+from som.interpreter.send import lookup_and_send_2, lookup_and_send_3, lookup_and_send_2_tier3, lookup_and_send_3_tier3
+from som.tier_type import (
+    is_hybrid,
+    is_tier1,
+    is_tier3,
+    is_tier4,
+    is_inliner,
+    is_tier1_no_ic,
+    is_tier1_no_ic_no_ho,
+)
 from som.vm.globals import nilObject, trueObject, falseObject
 from som.vmobjects.array import Array
 from som.vmobjects.block_bc import BcBlock
@@ -42,7 +50,7 @@ def interpret(method, frame, max_stack_size, dummy=False):
     Each interpreter represents copmilation tier.
     e.g,
       - interpret_tier1: threaded code
-      - interpret_tier2: tracing JIT
+      - interpret_tier3: tracing JIT
     In the whle loop we can define the rule to shift the compilation timer.
     Movement from interpreter to interpreter is implemented using exceptions.
     """
@@ -52,7 +60,7 @@ def interpret(method, frame, max_stack_size, dummy=False):
         from som.interpreter.bc.interpreter_tier1_no_ic_no_handler_opt import interpret_tier1
     else:
         from som.interpreter.bc.interpreter_tier1 import interpret_tier1
-    from som.interpreter.bc.interpreter_tier2 import interpret_tier2
+    from som.interpreter.bc.interpreter_tier3 import interpret_tier3
 
     if dummy:
         return
@@ -63,9 +71,25 @@ def interpret(method, frame, max_stack_size, dummy=False):
     elif is_tier1_no_ic() or is_tier1_no_ic_no_ho():
         w_result = interpret_tier1(method, frame, max_stack_size)
         return w_result
-    elif is_tier2():
-        result = interpret_tier2(method, frame, max_stack_size)
+    elif is_inliner():
+        # tier 2: interpret_tier3 with is_inliner() folded True -> residualize all sends
+        result = interpret_tier3(method, frame, max_stack_size)
         return result
+    elif is_tier3():
+        result = interpret_tier3(method, frame, max_stack_size)
+        return result
+    elif is_tier4():
+        # Committed methods bypass the controller so the JIT can inline the activation
+        # into a caller's trace -- the hot path for whileTrue:/do: blocks invoked via
+        # the generic invoke_1. adaptive_tier is quasi-immutable, so `at` folds in the
+        # trace; a trace compiled while warm is invalidated by the promotion write.
+        at = method.adaptive_tier
+        if at == 3 or at == 4:
+            return interpret_tier3(method, frame, max_stack_size, hybrid=at == 4)
+        # Undecided (0) and warm (2) go through the controller, which counts warm
+        # activations off-trace toward the promotion threshold.
+        from som.interpreter.bc.adaptive import _adaptive_tier4
+        return _adaptive_tier4(method, frame, max_stack_size)
     elif is_hybrid():
         current_bc_idx = 0
         while True:
@@ -81,7 +105,7 @@ def interpret(method, frame, max_stack_size, dummy=False):
                 stack = e.stack
                 current_bc_idx = e.bytecode_index
 
-            w_result = interpret_tier2(
+            w_result = interpret_tier3(
                 method,
                 frame,
                 max_stack_size,

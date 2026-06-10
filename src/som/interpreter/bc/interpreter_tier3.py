@@ -18,8 +18,28 @@ from som.interpreter.bc.frame import (
 from som.interpreter.bc.tier_shifting import ContinueInTier1, ContinueInTier2
 from som.interpreter.bc.traverse_stack import t_empty, t_dump, t_push
 from som.interpreter.control_flow import ReturnException
-from som.interpreter.send import lookup_and_send_2, lookup_and_send_3, lookup_and_send_2_tier2, lookup_and_send_3_tier2
-from som.tier_type import is_hybrid, is_tier1, is_tier2
+from som.interpreter.send import lookup_and_send_2, lookup_and_send_3, lookup_and_send_2_tier3, lookup_and_send_3_tier3
+from som.interpreter.bc.residual import (
+    site_kind,
+    is_arith_kind,
+    is_predicate_kind,
+    _t3_pure,
+    _residual_send_1,
+    _residual_send_2,
+    _residual_send_3,
+    _residual_send_4,
+    _residual_send_n,
+)
+from som.interpreter.bc.adaptive import _profile, _profiling_active_for, _profile_layout
+from som.tier_type import (
+    is_hybrid,
+    is_tier1,
+    is_tier3,
+    is_inliner,
+    MODE_INLINE,
+    MODE_HYBRID,
+    MODE_INLINER,
+)
 from som.vm.globals import nilObject, trueObject, falseObject
 from som.vmobjects.array import Array
 from som.vmobjects.block_bc import BcBlock
@@ -35,6 +55,79 @@ from rlib.jit import (
     dont_look_inside
 )
 
+
+# Send dispatch: inline (tier 3) / residualize-all (tier 2 inliner) / residualize
+# poly-sites (tier 4 hybrid). is_inliner() is a per-binary constant that folds the
+# inliner arm away outside the tier-2 binary; `hybrid` is the promoted-red 3-valued
+# mode, so hybrid == MODE_INLINER folds within a trace too.
+@always_inline
+def _residual_2(method, invokable, kind, receiver, arg):
+    # Pure fast path (+,-,*, comparisons on Integer^2/Double^2); self-rejects with
+    # None otherwise. Only ever hits for an arith/predicate kind, so skip it (and its
+    # isinstance checks) for the generic sends the inliner also routes here.
+    if is_arith_kind(kind) or is_predicate_kind(kind):
+        res = _t3_pure(kind, receiver, arg)
+        if res is not None:
+            return res
+    return _residual_send_2(method, invokable, receiver, arg)
+
+
+@always_inline
+def _dispatch_send_1(method, invokable, receiver, hybrid):
+    if is_inliner() or hybrid == MODE_INLINER:
+        return _residual_send_1(method, invokable, receiver)
+    return invokable.invoke_1_tier3(receiver, hybrid)
+
+
+@always_inline
+def _dispatch_send_2(method, bc_idx, signature, invokable, receiver, arg, hybrid):
+    if is_inliner() or hybrid == MODE_INLINER:
+        kind = site_kind(method, bc_idx, signature)
+        if hybrid == MODE_INLINER and not we_are_jitted():
+            # warm phase: operand-shape profile feeding the promotion decision
+            if is_arith_kind(kind) or is_predicate_kind(kind):
+                _profile(method, bc_idx, kind, receiver, arg)
+        return _residual_2(method, invokable, kind, receiver, arg)
+    if hybrid == MODE_HYBRID:
+        kind = site_kind(method, bc_idx, signature)
+        if is_arith_kind(kind) or is_predicate_kind(kind):
+            if not we_are_jitted():
+                _profile(method, bc_idx, kind, receiver, arg)
+                if method._poly[bc_idx] == 0:
+                    method._inl_runs[bc_idx] += 1
+            if promote(method._poly[bc_idx]):
+                return _residual_2(method, invokable, kind, receiver, arg)
+    elif not we_are_jitted() and _profiling_active_for(method):
+        # Controller profiling window: gather the operand-shape profile while running
+        # inline, so a monomorphic method is never traced in hybrid mode.
+        kind = site_kind(method, bc_idx, signature)
+        if is_arith_kind(kind) or is_predicate_kind(kind):
+            _profile(method, bc_idx, kind, receiver, arg)
+            if method._poly[bc_idx] == 0:
+                method._inl_runs[bc_idx] += 1
+    return invokable.invoke_2_tier3(receiver, arg, hybrid)
+
+
+@always_inline
+def _dispatch_send_3(method, invokable, receiver, arg1, arg2, hybrid):
+    if is_inliner() or hybrid == MODE_INLINER:
+        return _residual_send_3(method, invokable, receiver, arg1, arg2)
+    return invokable.invoke_3_tier3(receiver, arg1, arg2, hybrid)
+
+
+@always_inline
+def _dispatch_send_4(method, invokable, receiver, arg1, arg2, arg3, hybrid):
+    if is_inliner() or hybrid == MODE_INLINER:
+        return _residual_send_4(method, invokable, receiver, arg1, arg2, arg3)
+    return invokable.invoke_4_tier3(receiver, arg1, arg2, arg3, hybrid)
+
+
+@always_inline
+def _dispatch_send_n(method, invokable, stack, stack_ptr, hybrid):
+    if is_inliner() or hybrid == MODE_INLINER:
+        return _residual_send_n(method, invokable, stack, stack_ptr)
+    return invokable.invoke_n_tier3(stack, stack_ptr, hybrid)
+
 def _do_return_non_local(result, frame, ctx_level):
     # Compute the context for the non-local return
     block = get_block_at(frame, ctx_level)
@@ -49,7 +142,7 @@ def _do_return_non_local(result, frame, ctx_level):
 
     raise ReturnException(result, block.get_on_stack_marker())
 
-def _invoke_invokable_slow_path_tier2(invokable, num_args, receiver, stack, stack_ptr):
+def _invoke_invokable_slow_path_tier3(invokable, num_args, receiver, stack, stack_ptr):
     if num_args == 1:
         stack[stack_ptr] = invokable.invoke_1(receiver)
 
@@ -78,8 +171,9 @@ def _invoke_invokable_slow_path_tier2(invokable, num_args, receiver, stack, stac
 
 
 @jit.unroll_safe
-def interpret_tier2(
-    method, frame, max_stack_size, current_bc_idx=0, stack=None, stack_ptr=-1, dummy=False
+def interpret_tier3(
+    method, frame, max_stack_size, current_bc_idx=0, stack=None, stack_ptr=-1,
+    hybrid=False, dummy=False
 ):
     from som.vm.current import current_universe
 
@@ -93,11 +187,28 @@ def interpret_tier2(
     while True:
         jitdriver.jit_merge_point(
             current_bc_idx=current_bc_idx,
+            hybrid=hybrid,
             stack_ptr=stack_ptr,
             method=method,
             frame=frame,
             stack=stack,
         )
+
+        # Promote the (red) hybrid mode so a committed method's trace specialises to
+        # its single steady-state mode.
+        hybrid = promote(hybrid)
+
+        # Warm execution leaves as soon as the method is promoted: adaptive_tier is
+        # quasi-immutable, so the promotion write invalidates the warm trace and the
+        # loop deopts here, picks up the committed mode and continues at the same
+        # bytecode. Undecided (0) and warm (2) stay in MODE_INLINER. In committed
+        # traces this branch folds away (hybrid promotes to 0/1).
+        if hybrid == MODE_INLINER:
+            at = method.adaptive_tier
+            if at == 3:
+                hybrid = MODE_INLINE
+            elif at == 4:
+                hybrid = MODE_HYBRID
 
         bytecode = method.get_bytecode(current_bc_idx)
 
@@ -227,7 +338,7 @@ def interpret_tier2(
             if glob:
                 stack[stack_ptr] = glob
             else:
-                stack[stack_ptr] = lookup_and_send_2_tier2(
+                stack[stack_ptr] = lookup_and_send_2_tier3(
                     get_self_dynamically(frame), global_name, "unknownGlobal:"
                 )
 
@@ -348,17 +459,33 @@ def interpret_tier2(
             signature = method.get_constant(current_bc_idx)
             receiver = stack[stack_ptr]
 
+            if hybrid and promote(method._mega[current_bc_idx]):
+                # Megamorphic unary site: dispatch opaquely so the trace is not specialised
+                # per receiver class (no inline-cache overflow / per-class bridge here).
+                stack[stack_ptr] = _residual_mega_send_1(
+                    method, current_bc_idx, signature, receiver, current_universe
+                )
+                current_bc_idx = next_bc_idx
+                continue
+
             layout = receiver.get_object_layout(current_universe)
+            if not we_are_jitted() and (hybrid or _profiling_active_for(method)):
+                # Count distinct receiver classes, but only once the 2-entry inline
+                # cache has overflowed, so the mono/2-class majority pays nothing.
+                l1 = method.get_inline_cache_layout(current_bc_idx)
+                l2 = method.get_inline_cache_layout(current_bc_idx + 1)
+                if l1 is not None and l2 is not None and layout is not l1 and layout is not l2:
+                    _profile_layout(method, current_bc_idx, signature, layout)
             invokable = _lookup(layout, signature, method, current_bc_idx)
             if invokable is not None:
-                stack[stack_ptr] = invokable.invoke_1_tier2(receiver)
+                stack[stack_ptr] = _dispatch_send_1(method, invokable, receiver, hybrid)
             elif not layout.is_latest:
                 _update_object_and_invalidate_old_caches(
                     receiver, method, current_bc_idx, current_universe
                 )
                 next_bc_idx = current_bc_idx
             else:
-                stack_ptr = _send_does_not_understand_tier2(
+                stack_ptr = _send_does_not_understand_tier3(
                     receiver, signature, stack, stack_ptr
                 )
 
@@ -366,21 +493,43 @@ def interpret_tier2(
             signature = method.get_constant(current_bc_idx)
             receiver = stack[stack_ptr - 1]
 
+            if hybrid and promote(method._mega[current_bc_idx]):
+                # Megamorphic site: dispatch opaquely so the trace is not specialised
+                # per receiver class (no inline-cache overflow / per-class bridge here).
+                arg = stack[stack_ptr]
+                if we_are_jitted():
+                    stack[stack_ptr] = None
+                stack_ptr -= 1
+                stack[stack_ptr] = _residual_mega_send_2(
+                    method, current_bc_idx, signature, receiver, arg, current_universe
+                )
+                current_bc_idx = next_bc_idx
+                continue
+
             layout = receiver.get_object_layout(current_universe)
+            if not we_are_jitted() and (hybrid or _profiling_active_for(method)):
+                # Count distinct receiver classes only once the 2-entry IC has overflowed
+                # (>2 classes) -- the monomorphic/2-class majority pays nothing (see send_1).
+                l1 = method.get_inline_cache_layout(current_bc_idx)
+                l2 = method.get_inline_cache_layout(current_bc_idx + 1)
+                if l1 is not None and l2 is not None and layout is not l1 and layout is not l2:
+                    _profile_layout(method, current_bc_idx, signature, layout)
             invokable = _lookup(layout, signature, method, current_bc_idx)
             if invokable is not None:
                 arg = stack[stack_ptr]
                 if we_are_jitted():
                     stack[stack_ptr] = None
                 stack_ptr -= 1
-                stack[stack_ptr] = invokable.invoke_2_tier2(receiver, arg)
+                stack[stack_ptr] = _dispatch_send_2(
+                    method, current_bc_idx, signature, invokable, receiver, arg, hybrid
+                )
             elif not layout.is_latest:
                 _update_object_and_invalidate_old_caches(
                     receiver, method, current_bc_idx, current_universe
                 )
                 next_bc_idx = current_bc_idx
             else:
-                stack_ptr = _send_does_not_understand_tier2(
+                stack_ptr = _send_does_not_understand_tier3(
                     receiver, signature, stack, stack_ptr
                 )
 
@@ -399,14 +548,16 @@ def interpret_tier2(
                     stack[stack_ptr - 1] = None
 
                 stack_ptr -= 2
-                stack[stack_ptr] = invokable.invoke_3_tier2(receiver, arg1, arg2)
+                stack[stack_ptr] = _dispatch_send_3(
+                    method, invokable, receiver, arg1, arg2, hybrid
+                )
             elif not layout.is_latest:
                 _update_object_and_invalidate_old_caches(
                     receiver, method, current_bc_idx, current_universe
                 )
                 next_bc_idx = current_bc_idx
             else:
-                stack_ptr = _send_does_not_understand_tier2(
+                stack_ptr = _send_does_not_understand_tier3(
                     receiver, signature, stack, stack_ptr
                 )
 
@@ -427,14 +578,16 @@ def interpret_tier2(
                     stack[stack_ptr - 2] = None
 
                 stack_ptr -= 3
-                stack[stack_ptr] = invokable.invoke_4_tier2(receiver, arg1, arg2, arg3)
+                stack[stack_ptr] = _dispatch_send_4(
+                    method, invokable, receiver, arg1, arg2, arg3, hybrid
+                )
             elif not layout.is_latest:
                 _update_object_and_invalidate_old_caches(
                     receiver, method, current_bc_idx, current_universe
                 )
                 next_bc_idx = current_bc_idx
             else:
-                stack_ptr = _send_does_not_understand_tier2(
+                stack_ptr = _send_does_not_understand_tier3(
                     receiver, signature, stack, stack_ptr
                 )
 
@@ -447,19 +600,19 @@ def interpret_tier2(
             layout = receiver.get_object_layout(current_universe)
             invokable = _lookup(layout, signature, method, current_bc_idx)
             if invokable is not None:
-                stack_ptr = invokable.invoke_n_tier2(stack, stack_ptr)
+                stack_ptr = _dispatch_send_n(method, invokable, stack, stack_ptr, hybrid)
             elif not layout.is_latest:
                 _update_object_and_invalidate_old_caches(
                     receiver, method, current_bc_idx, current_universe
                 )
                 next_bc_idx = current_bc_idx
             else:
-                stack_ptr = _send_does_not_understand_tier2(
+                stack_ptr = _send_does_not_understand_tier3(
                     receiver, signature, stack, stack_ptr
                 )
 
         elif bytecode == Bytecodes.super_send:
-            stack_ptr = _do_super_send_tier2(current_bc_idx, method, stack, stack_ptr)
+            stack_ptr = _do_super_send_tier3(current_bc_idx, method, stack, stack_ptr)
 
         elif bytecode == Bytecodes.return_local:
             return stack[stack_ptr]
@@ -555,13 +708,20 @@ def interpret_tier2(
 
         elif bytecode == Bytecodes.jump_backward:
             next_bc_idx = current_bc_idx - method.get_bytecode(current_bc_idx + 1)
-            jitdriver.can_enter_jit(
-                current_bc_idx=next_bc_idx,
-                stack_ptr=stack_ptr,
-                method=method,
-                frame=frame,
-                stack=stack,
-            )
+            # Warm loops don't enter this driver: in the tier-4 binary a warm trace
+            # here is far more expensive than the dedicated warm driver's (see
+            # interpreter_inliner). The dedicated inliner interpreter traces them;
+            # this driver only compiles committed code. `hybrid` is promoted, so the
+            # branch folds away in committed traces.
+            if hybrid != MODE_INLINER:
+                jitdriver.can_enter_jit(
+                    current_bc_idx=next_bc_idx,
+                    hybrid=hybrid,
+                    stack_ptr=stack_ptr,
+                    method=method,
+                    frame=frame,
+                    stack=stack,
+                )
 
         elif bytecode == Bytecodes.jump2:
             next_bc_idx = (
@@ -640,17 +800,20 @@ def interpret_tier2(
                 method.get_bytecode(current_bc_idx + 1)
                 + (method.get_bytecode(current_bc_idx + 2) << 8)
             )
-            jitdriver.can_enter_jit(
-                current_bc_idx=next_bc_idx,
-                stack_ptr=stack_ptr,
-                method=method,
-                frame=frame,
-                stack=stack,
-            )
+            # Warm loops stay interpreted (see jump_backward).
+            if hybrid != MODE_INLINER:
+                jitdriver.can_enter_jit(
+                    current_bc_idx=next_bc_idx,
+                    hybrid=hybrid,
+                    stack_ptr=stack_ptr,
+                    method=method,
+                    frame=frame,
+                    stack=stack,
+                )
 
         elif bytecode == Bytecodes.q_super_send_1:
             invokable = method.get_inline_cache_invokable(current_bc_idx)
-            stack[stack_ptr] = invokable.invoke_1_tier2(stack[stack_ptr])
+            stack[stack_ptr] = invokable.invoke_1_tier3(stack[stack_ptr], hybrid)
 
         elif bytecode == Bytecodes.q_super_send_2:
             invokable = method.get_inline_cache_invokable(current_bc_idx)
@@ -658,7 +821,7 @@ def interpret_tier2(
             if we_are_jitted():
                 stack[stack_ptr] = None
             stack_ptr -= 1
-            stack[stack_ptr] = invokable.invoke_2_tier2(stack[stack_ptr], arg)
+            stack[stack_ptr] = invokable.invoke_2_tier3(stack[stack_ptr], arg, hybrid)
 
         elif bytecode == Bytecodes.q_super_send_3:
             invokable = method.get_inline_cache_invokable(current_bc_idx)
@@ -668,7 +831,7 @@ def interpret_tier2(
                 stack[stack_ptr] = None
                 stack[stack_ptr - 1] = None
             stack_ptr -= 2
-            stack[stack_ptr] = invokable.invoke_3_tier2(stack[stack_ptr], arg1, arg2)
+            stack[stack_ptr] = invokable.invoke_3_tier3(stack[stack_ptr], arg1, arg2, hybrid)
 
         elif bytecode == Bytecodes.q_super_send_4:
             invokable = method.get_inline_cache_invokable(current_bc_idx)
@@ -680,7 +843,7 @@ def interpret_tier2(
                 stack[stack_ptr - 1] = None
                 stack[stack_ptr - 2] = None
             stack_ptr -= 3
-            stack[stack_ptr] = invokable.invoke_4_tier2(stack[stack_ptr], arg1, arg2, arg3)
+            stack[stack_ptr] = invokable.invoke_4_tier3(stack[stack_ptr], arg1, arg2, arg3, hybrid)
 
         elif bytecode == Bytecodes.q_super_send_n:
             invokable = method.get_inline_cache_invokable(current_bc_idx)
@@ -712,7 +875,7 @@ def interpret_tier2(
         current_bc_idx = next_bc_idx
 
 
-def _do_super_send_tier2(bytecode_index, method, stack, stack_ptr):
+def _do_super_send_tier3(bytecode_index, method, stack, stack_ptr):
     signature = method.get_constant(bytecode_index)
 
     receiver_class = method.get_holder().get_super_class()
@@ -736,11 +899,11 @@ def _do_super_send_tier2(bytecode_index, method, stack, stack_ptr):
         else:
             bc = Bytecodes.q_super_send_n
         method.set_bytecode(bytecode_index, bc)
-        stack_ptr = _invoke_invokable_slow_path_tier2(
+        stack_ptr = _invoke_invokable_slow_path_tier3(
             invokable, num_args, receiver, stack, stack_ptr
         )
     else:
-        stack_ptr = _send_does_not_understand_tier2(
+        stack_ptr = _send_does_not_understand_tier3(
             receiver, invokable.get_signature(), stack, stack_ptr
         )
     return stack_ptr
@@ -807,7 +970,7 @@ def _update_object_and_invalidate_old_caches(obj, method, bytecode_index, univer
         method.set_inline_cache(bytecode_index + 1, None, None)
 
 
-def _send_does_not_understand_tier2(receiver, selector, stack, stack_ptr):
+def _send_does_not_understand_tier3(receiver, selector, stack, stack_ptr):
     # ignore self
     number_of_arguments = selector.get_number_of_signature_arguments() - 1
     arguments_array = Array.from_size(number_of_arguments)
@@ -823,14 +986,73 @@ def _send_does_not_understand_tier2(receiver, selector, stack, stack_ptr):
         arguments_array.set_indexable_field(i, value)
         i -= 1
 
-    stack[stack_ptr] = lookup_and_send_3_tier2(
+    stack[stack_ptr] = lookup_and_send_3_tier3(
         receiver, selector, arguments_array, "doesNotUnderstand:arguments:"
     )
 
     return stack_ptr
 
 
-def get_printable_location_tier2(bytecode_index, method):
+@jit.dont_look_inside
+def _residual_mega_send_1(method, bytecode_index, signature, receiver, universe):
+    # Opaque megamorphic dispatch for a unary send, behind the barrier so the trace
+    # never specialises on the receiver class. Same layout-invalidation / dNU semantics
+    # as the send_1 handler, but resolved through the per-site PIC instead of _lookup
+    # (whose 2 slots always miss at a committed mega site).
+    layout = receiver.get_object_layout(universe)
+    invokable = method.mega_cache_lookup(bytecode_index, layout)
+    if invokable is not None:
+        return invokable.invoke_1_tier3(receiver, False)
+    invokable = layout.lookup_invokable(signature)
+    if invokable is not None:
+        method.mega_cache_store(bytecode_index, layout, invokable)
+        return invokable.invoke_1_tier3(receiver, False)
+    if not layout.is_latest:
+        _update_object_and_invalidate_old_caches(
+            receiver, method, bytecode_index, universe
+        )
+        layout = receiver.get_object_layout(universe)
+        invokable = layout.lookup_invokable(signature)
+        if invokable is not None:
+            method.mega_cache_store(bytecode_index, layout, invokable)
+            return invokable.invoke_1_tier3(receiver, False)
+    # doesNotUnderstand: (a unary send has no real arguments)
+    arguments_array = Array.from_size(0)
+    return lookup_and_send_3_tier3(
+        receiver, signature, arguments_array, "doesNotUnderstand:arguments:"
+    )
+
+
+@jit.dont_look_inside
+def _residual_mega_send_2(method, bytecode_index, signature, receiver, arg, universe):
+    # Opaque megamorphic dispatch for a binary send (see _residual_mega_send_1). The
+    # arg has already been popped off the operand stack by the caller.
+    layout = receiver.get_object_layout(universe)
+    invokable = method.mega_cache_lookup(bytecode_index, layout)
+    if invokable is not None:
+        return invokable.invoke_2_tier3(receiver, arg, False)
+    invokable = layout.lookup_invokable(signature)
+    if invokable is not None:
+        method.mega_cache_store(bytecode_index, layout, invokable)
+        return invokable.invoke_2_tier3(receiver, arg, False)
+    if not layout.is_latest:
+        _update_object_and_invalidate_old_caches(
+            receiver, method, bytecode_index, universe
+        )
+        layout = receiver.get_object_layout(universe)
+        invokable = layout.lookup_invokable(signature)
+        if invokable is not None:
+            method.mega_cache_store(bytecode_index, layout, invokable)
+            return invokable.invoke_2_tier3(receiver, arg, False)
+    # doesNotUnderstand: (a send_2 selector always has exactly one real argument)
+    arguments_array = Array.from_size(1)
+    arguments_array.set_indexable_field(0, arg)
+    return lookup_and_send_3_tier3(
+        receiver, signature, arguments_array, "doesNotUnderstand:arguments:"
+    )
+
+
+def get_printable_location_tier3(bytecode_index, method):
     from som.vmobjects.method_bc import BcAbstractMethod
 
     assert isinstance(method, BcAbstractMethod)
@@ -842,12 +1064,17 @@ def get_printable_location_tier2(bytecode_index, method):
     )
 
 
+# `hybrid` is the residualization mode, a jitdriver red (a green would be folded and
+# rejected by warmspot, and two jit_merge_points in one graph are forbidden). The
+# controller profiles methods inline, so a committed monomorphic method only ever runs
+# one mode and its trace never bridges.
 jitdriver = jit.JitDriver(
     name="Interpreter",
     greens=["current_bc_idx", "method"],
-    reds=["stack_ptr", "frame", "stack"],
-    # virtualizables=['frame'],
-    get_printable_location=get_printable_location_tier2,
+    # reds must be grouped by kind: INTs, then REFs, then FLOATs. hybrid is a Bool
+    # (INT-kind), so it sits beside stack_ptr, ahead of the frame/stack refs.
+    reds=["stack_ptr", "hybrid", "frame", "stack"],
+    get_printable_location=get_printable_location_tier3,
     # the next line is a workaround around a likely bug in RPython
     # for some reason, the inlining heuristics default to "never inline" when
     # two different jit drivers are involved (in our case, the primitive

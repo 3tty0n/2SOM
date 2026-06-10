@@ -23,8 +23,8 @@ from som.interpreter.bc.hints import (
 )
 from som.interpreter.bc.tier_shifting import ContinueInTier1, ContinueInTier2, tier_manager
 from som.interpreter.control_flow import ReturnException
-from som.interpreter.send import lookup_and_send_2, lookup_and_send_3, lookup_and_send_2_tier2, lookup_and_send_3_tier2
-from som.tier_type import is_hybrid, is_tier1, is_tier2
+from som.interpreter.send import lookup_and_send_2, lookup_and_send_3, lookup_and_send_2_tier3, lookup_and_send_3_tier3
+from som.tier_type import is_hybrid, is_tier1, is_tier3
 from som.vm.globals import nilObject, trueObject, falseObject
 from som.vmobjects.array import Array
 from som.vmobjects.block_bc import BcBlock

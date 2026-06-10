@@ -74,7 +74,7 @@ class _BcPrimitive(_AbstractPrimitive):
         prim_fn = self._prim_fn
         return prim_fn(self, stack, stack_ptr)
 
-    def invoke_n_tier2(self, stack, stack_ptr, ctx=None):
+    def invoke_n_tier3(self, stack, stack_ptr, hybrid=False, ctx=None):
         prim_fn = self._prim_fn
         return prim_fn(self, stack, stack_ptr)
 
@@ -96,7 +96,7 @@ class UnaryPrimitive(_AbstractPrimitive):
         prim_fn = self._prim_fn
         return prim_fn(rcvr)
 
-    def invoke_1_tier2(self, rcvr, ctx=None):
+    def invoke_1_tier3(self, rcvr, hybrid=False, ctx=None):
         prim_fn = self._prim_fn
         return prim_fn(rcvr)
 
@@ -115,7 +115,7 @@ class BinaryPrimitive(_AbstractPrimitive):
         prim_fn = self._prim_fn
         return prim_fn(rcvr, arg)
 
-    def invoke_2_tier2(self, rcvr, arg, ctx=None):
+    def invoke_2_tier3(self, rcvr, arg, hybrid=False, ctx=None):
         prim_fn = self._prim_fn
         return prim_fn(rcvr, arg)
 
@@ -134,7 +134,7 @@ class TernaryPrimitive(_AbstractPrimitive):
         prim_fn = self._prim_fn
         return prim_fn(rcvr, arg1, arg2)
 
-    def invoke_3_tier2(self, rcvr, arg1, arg2, ctx=None):
+    def invoke_3_tier3(self, rcvr, arg1, arg2, hybrid=False, ctx=None):
         prim_fn = self._prim_fn
         return prim_fn(rcvr, arg1, arg2)
 
@@ -153,7 +153,7 @@ class QuaternaryPrimitive(_AbstractPrimitive):
         prim_fn = self._prim_fn
         return prim_fn(rcvr, arg1, arg2, arg3)
 
-    def invoke_4_tier2(self, rcvr, arg1, arg2, arg3, ctx=None):
+    def invoke_4_tier3(self, rcvr, arg1, arg2, arg3, hybrid=False, ctx=None):
         prim_fn = self._prim_fn
         return prim_fn(rcvr, arg1, arg2, arg3)
 

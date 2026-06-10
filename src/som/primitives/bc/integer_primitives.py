@@ -4,7 +4,13 @@ from som.primitives.integer_primitives import IntegerPrimitivesBase as _Base
 from som.vmobjects.double import Double
 from som.vmobjects.integer import Integer
 from som.vmobjects.primitive import Primitive, TernaryPrimitive, QuaternaryPrimitive
-from som.tier_type import is_tier1, is_tier2, is_hybrid
+from som.tier_type import is_tier1, is_tier3, is_tier4, is_inliner, is_hybrid
+
+
+def _is_tracing_tier():
+    # tiers that drive interpret_tier3 (stack inliner / tracing / hybrid-residual /
+    # the threaded->tracing shift) and so want the loop-driver jitdriver active.
+    return is_tier3() or is_tier4() or is_inliner() or is_hybrid()
 
 
 def get_printable_location_up(block_method):
@@ -63,13 +69,15 @@ def _to_do_int(i, by_increment, top, block, block_method):
     assert isinstance(i, int)
     assert isinstance(top, int)
     while i <= top:
-        if is_hybrid():
+        if _is_tracing_tier():
             jitdriver_int.jit_merge_point(block_method=block_method)
 
         if is_tier1():
             block_method.invoke_2(block, Integer(i))
+        elif is_tier4():
+            block_method.invoke_2_tier4(block, Integer(i))
         else:
-            block_method.invoke_2_tier2(block, Integer(i))
+            block_method.invoke_2_tier3(block, Integer(i), False)
         i += by_increment
 
 
@@ -77,13 +85,15 @@ def _to_do_double(i, by_increment, top, block, block_method):
     assert isinstance(i, int)
     assert isinstance(top, float)
     while i <= top:
-        if is_tier2() or is_hybrid():
+        if _is_tracing_tier():
             jitdriver_double.jit_merge_point(block_method=block_method)
 
         if is_tier1():
             block_method.invoke_2(block, Integer(i))
+        elif is_tier4():
+            block_method.invoke_2_tier4(block, Integer(i))
         else:
-            block_method.invoke_2_tier2(block, Integer(i))
+            block_method.invoke_2_tier3(block, Integer(i), False)
         i += by_increment
 
 
@@ -162,13 +172,15 @@ def _down_to_do_int(i, by_increment, bottom, block, block_method):
     assert isinstance(i, int)
     assert isinstance(bottom, int)
     while i >= bottom:
-        if is_tier2() or is_hybrid():
+        if _is_tracing_tier():
             jitdriver_int_down.jit_merge_point(block_method=block_method)
 
         if is_tier1():
             block_method.invoke_2(block, Integer(i))
+        elif is_tier4():
+            block_method.invoke_2_tier4(block, Integer(i))
         else:
-            block_method.invoke_2_tier2(block, Integer(i))
+            block_method.invoke_2_tier3(block, Integer(i), False)
         i -= by_increment
 
 
@@ -176,13 +188,15 @@ def _down_to_do_double(i, by_increment, bottom, block, block_method):
     assert isinstance(i, int)
     assert isinstance(bottom, float)
     while i >= bottom:
-        if is_tier2() or is_hybrid():
+        if _is_tracing_tier():
             jitdriver_double_down.jit_merge_point(block_method=block_method)
 
         if is_tier1():
             block_method.invoke_2(block, Integer(i))
+        elif is_tier4():
+            block_method.invoke_2_tier4(block, Integer(i))
         else:
-            block_method.invoke_2_tier2(block, Integer(i))
+            block_method.invoke_2_tier3(block, Integer(i), False)
         i -= by_increment
 
 

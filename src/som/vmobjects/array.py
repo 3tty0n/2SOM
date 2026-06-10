@@ -3,7 +3,21 @@ from rlib.erased import new_erasing_pair
 from rlib.jit import JitDriver
 from rlib.debug import make_sure_not_resized
 
-from som.tier_type import is_tier2, is_hybrid
+from som.tier_type import is_tier1, is_tier3, is_tier4, is_inliner, is_hybrid
+
+
+def _put_all_should_jit():
+    # Emit the putAll: loop merge point for every tracing tier, not plain threaded
+    # code (tier 1). Mirrors _is_tracing_tier() in bc/integer_primitives.py.
+    return is_tier3() or is_tier4() or is_inliner() or is_hybrid()
+
+
+def _put_all_invoke_1(block_method, block):
+    if is_tier1():
+        return block_method.invoke_1(block)
+    if is_tier4():
+        return block_method.invoke_1_tier4(block)
+    return block_method.invoke_1_tier3(block, False)
 
 from som.vmobjects.abstract_object import AbstractObject
 from som.vm.globals import nilObject, falseObject, trueObject
@@ -138,13 +152,10 @@ class _ArrayStrategy(object):
     def _set_remaining_with_block_as_nil(array, block, size, next_i):
         block_method = block.get_method()
         while next_i < size:
-            if is_tier2() or is_hybrid():
+            if _put_all_should_jit():
                 put_all_nil_driver.jit_merge_point(block_method=block_method)
 
-            if is_tier2() or is_hybrid():
-                result = block_method.invoke_1_tier2(block)
-            else:
-                result = block_method.invoke_1(block)
+            result = _put_all_invoke_1(block_method, block)
             if result is not nilObject:
                 # ok, fall back, let's go straight to obj strategy
                 # todo: perhaps, partially empty would be better?
@@ -162,13 +173,10 @@ class _ArrayStrategy(object):
     def _set_remaining_with_block_as_long(array, block, size, next_i, storage):
         block_method = block.get_method()
         while next_i < size:
-            if is_tier2() or is_hybrid():
+            if _put_all_should_jit():
                 put_all_long_driver.jit_merge_point(block_method=block_method)
 
-            if is_tier2() or is_hybrid():
-                result = block_method.invoke_1_tier2(block)
-            else:
-                result = block_method.invoke_1(block)
+            result = _put_all_invoke_1(block_method, block)
             if isinstance(result, Integer):
                 storage[next_i] = result.get_embedded_integer()
             else:
@@ -188,13 +196,10 @@ class _ArrayStrategy(object):
     def _set_remaining_with_block_as_double(array, block, size, next_i, storage):
         block_method = block.get_method()
         while next_i < size:
-            if is_tier2() or is_hybrid():
+            if _put_all_should_jit():
                 put_all_double_driver.jit_merge_point(block_method=block_method)
 
-            if is_tier2() or is_hybrid():
-                result = block_method.invoke_1_tier2(block)
-            else:
-                result = block_method.invoke_1(block)
+            result = _put_all_invoke_1(block_method, block)
             if isinstance(result, Double):
                 storage[next_i] = result.get_embedded_double()
             else:
@@ -214,13 +219,10 @@ class _ArrayStrategy(object):
     def _set_remaining_with_block_as_bool(array, block, size, next_i, storage):
         block_method = block.get_method()
         while next_i < size:
-            if is_tier2() or is_hybrid():
+            if _put_all_should_jit():
                 put_all_bool_driver.jit_merge_point(block_method=block_method)
 
-            if is_tier2() or is_hybrid():
-                result = block_method.invoke_1_tier2(block)
-            else:
-                result = block_method.invoke_1(block)
+            result = _put_all_invoke_1(block_method, block)
             if result is trueObject or result is falseObject:
                 storage[next_i] = result is trueObject
             else:
@@ -241,11 +243,9 @@ class _ArrayStrategy(object):
         block_method = block.get_method()
 
         while next_i < size:
-            if is_tier2() or is_hybrid():
+            if _put_all_should_jit():
                 put_all_obj_driver.jit_merge_point(block_method=block_method)
-                storage[next_i] = block_method.invoke_1_tier2(block)
-            else:
-                storage[next_i] = block_method.invoke_1(block)
+            storage[next_i] = _put_all_invoke_1(block_method, block)
             next_i += 1
 
         array.strategy = _obj_strategy

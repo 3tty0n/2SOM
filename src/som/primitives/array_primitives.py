@@ -6,7 +6,7 @@ from som.vmobjects.primitive import UnaryPrimitive, BinaryPrimitive, TernaryPrim
 from som.vmobjects.method import AbstractMethod
 from som.primitives.primitives import Primitives
 
-from som.tier_type import is_tier1
+from som.tier_type import is_tier1, is_tier4
 
 if is_ast_interpreter():
     from som.vmobjects.block_ast import AstBlock as _Block
@@ -61,8 +61,10 @@ def _do_indexes(rcvr, block):
         do_index_driver.jit_merge_point(block_method=block_method)
         if is_tier1():
             block_method.invoke_2(block, Integer(i))
+        elif is_tier4():
+            block_method.invoke_2_tier4(block, Integer(i))
         else:
-            block_method.invoke_2_tier2(block, Integer(i))
+            block_method.invoke_2_tier3(block, Integer(i), False)
         i += 1
 
 
@@ -87,8 +89,10 @@ def _do(rcvr, block):
         do_driver.jit_merge_point(block_method=block_method)
         if is_tier1():
             block_method.invoke_2(block, rcvr.get_indexable_field(i))
+        elif is_tier4():
+            block_method.invoke_2_tier4(block, rcvr.get_indexable_field(i))
         else:
-            block_method.invoke_2_tier2(block, rcvr.get_indexable_field(i))
+            block_method.invoke_2_tier3(block, rcvr.get_indexable_field(i), False)
         i += 1
 
 

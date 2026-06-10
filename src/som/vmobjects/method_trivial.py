@@ -7,7 +7,7 @@ from som.compiler.bc.bytecode_generator import (
 from som.interp_type import is_ast_interpreter
 from som.interpreter.ast.frame import FRAME_AND_INNER_RCVR_IDX
 from som.interpreter.bc.frame import stack_pop_old_arguments_and_push_result
-from som.interpreter.send import lookup_and_send_2, lookup_and_send_2_tier2
+from som.interpreter.send import lookup_and_send_2, lookup_and_send_2_tier3
 
 from som.vmobjects.method import AbstractMethod
 
@@ -54,19 +54,19 @@ class LiteralReturn(AbstractTrivialMethod):
     def invoke_1(self, _rcvr, ctx=None):
         return self._value
 
-    def invoke_1_tier2(self, _rcvr, ctx=None):
+    def invoke_1_tier3(self, _rcvr, hybrid=False, ctx=None):
         return self._value
 
     def invoke_2(self, _rcvr, _arg1, ctx=None):
         return self._value
 
-    def invoke_2_tier2(self, _rcvr, _arg1, ctx=None):
+    def invoke_2_tier3(self, _rcvr, _arg1, hybrid=False, ctx=None):
         return self._value
 
     def invoke_3(self, _rcvr, _arg1, _arg2, ctx=None):
         return self._value
 
-    def invoke_3_tier2(self, _rcvr, _arg1, _arg2, ctx=None):
+    def invoke_3_tier3(self, _rcvr, _arg1, _arg2, hybrid=False, ctx=None):
         return self._value
 
     def invoke_4(self, _rcvr, _arg1, _arg2, _arg3, ctx=None):
@@ -80,7 +80,7 @@ class LiteralReturn(AbstractTrivialMethod):
             self._value,
         )
 
-    def invoke_n_tier2(self, stack, stack_ptr, ctx=None):
+    def invoke_n_tier3(self, stack, stack_ptr, hybrid=False, ctx=None):
         return stack_pop_old_arguments_and_push_result(
             stack,
             stack_ptr,
@@ -129,7 +129,7 @@ class GlobalRead(AbstractTrivialMethod):
             "unknownGlobal:",
         )
 
-    def invoke_1_tier2(self, rcvr, ctx=None):
+    def invoke_1_tier3(self, rcvr, hybrid=False, ctx=None):
         if self._assoc is not None:
             return self._assoc.value
 
@@ -137,7 +137,7 @@ class GlobalRead(AbstractTrivialMethod):
             self._assoc = self.universe.get_globals_association(self._global_name)
             return self._assoc.value
 
-        return lookup_and_send_2_tier2(
+        return lookup_and_send_2_tier3(
             determine_outer_self(rcvr, self._context_level),
             self._global_name,
             "unknownGlobal:",
@@ -146,14 +146,14 @@ class GlobalRead(AbstractTrivialMethod):
     def invoke_2(self, rcvr, _arg1, ctx=None):
         return self.invoke_1(rcvr)
 
-    def invoke_2_tier2(self, rcvr, _arg1, ctx=None):
-        return self.invoke_1_tier2(rcvr)
+    def invoke_2_tier3(self, rcvr, _arg1, hybrid=False, ctx=None):
+        return self.invoke_1_tier3(rcvr, hybrid)
 
     def invoke_3(self, rcvr, _arg1, _arg2):
         return self.invoke_1(rcvr)
 
-    def invoke_3_tier2(self, rcvr, _arg1, _arg2):
-        return self.invoke_1_tier2(rcvr)
+    def invoke_3_tier3(self, rcvr, _arg1, _arg2, hybrid=False):
+        return self.invoke_1_tier3(rcvr, hybrid)
 
     def invoke_4(self, rcvr, _arg1, _arg2, _arg3):
         return self.invoke_1(rcvr)
@@ -169,10 +169,10 @@ class GlobalRead(AbstractTrivialMethod):
             value,
         )
 
-    def invoke_n_tier2(self, stack, stack_ptr):
+    def invoke_n_tier3(self, stack, stack_ptr, hybrid=False):
         num_args = self._signature.get_number_of_signature_arguments()
         rcvr = stack[stack_ptr - (num_args - 1)]
-        value = self.invoke_1_tier2(rcvr)
+        value = self.invoke_1_tier3(rcvr, hybrid)
         return stack_pop_old_arguments_and_push_result(
             stack,
             stack_ptr,
@@ -208,7 +208,7 @@ class FieldRead(AbstractTrivialMethod):
         outer_self = determine_outer_self(rcvr, self._context_level)
         return outer_self.get_field(self._field_idx)
 
-    def invoke_1_tier2(self, rcvr, ctx=None):
+    def invoke_1_tier3(self, rcvr, hybrid=False, ctx=None):
         if self._context_level == 0:
             return rcvr.get_field(self._field_idx)
 
@@ -218,14 +218,14 @@ class FieldRead(AbstractTrivialMethod):
     def invoke_2(self, rcvr, _arg1, ctx=None):
         return self.invoke_1(rcvr)
 
-    def invoke_2_tier2(self, rcvr, _arg1, ctx=None):
-        return self.invoke_1_tier2(rcvr)
+    def invoke_2_tier3(self, rcvr, _arg1, hybrid=False, ctx=None):
+        return self.invoke_1_tier3(rcvr, hybrid)
 
     def invoke_3(self, rcvr, _arg1, _arg2, ctx=None):
         return self.invoke_1(rcvr)
 
-    def invoke_3_tier2(self, rcvr, _arg1, _arg2, ctx=None):
-        return self.invoke_1_tier2(rcvr)
+    def invoke_3_tier3(self, rcvr, _arg1, _arg2, hybrid=False, ctx=None):
+        return self.invoke_1_tier3(rcvr, hybrid)
 
     def invoke_4(self, rcvr, _arg1, _arg2, _arg3, ctx=None):
         return self.invoke_1(rcvr)
@@ -241,10 +241,10 @@ class FieldRead(AbstractTrivialMethod):
             value,
         )
 
-    def invoke_n_tier2(self, stack, stack_ptr, ctx=None):
+    def invoke_n_tier3(self, stack, stack_ptr, hybrid=False, ctx=None):
         num_args = self._signature.get_number_of_signature_arguments()
         rcvr = stack[stack_ptr - (num_args - 1)]
-        value = self.invoke_1_tier2(rcvr)
+        value = self.invoke_1_tier3(rcvr, hybrid)
         return stack_pop_old_arguments_and_push_result(
             stack,
             stack_ptr,
@@ -278,7 +278,7 @@ class FieldWrite(AbstractTrivialMethod):
             "Not supported, should never be called. We need an argument"
         )
 
-    def invoke_1_tier2(self, _rcvr, ctx=None):
+    def invoke_1_tier3(self, _rcvr, hybrid=False, ctx=None):
         raise NotImplementedError(
             "Not supported, should never be called. We need an argument"
         )
@@ -287,7 +287,7 @@ class FieldWrite(AbstractTrivialMethod):
         rcvr.set_field(self._field_idx, arg1)
         return rcvr
 
-    def invoke_2_tier2(self, rcvr, arg1, ctx=None):
+    def invoke_2_tier3(self, rcvr, arg1, hybrid=False, ctx=None):
         rcvr.set_field(self._field_idx, arg1)
         return rcvr
 
@@ -296,10 +296,10 @@ class FieldWrite(AbstractTrivialMethod):
             return self.invoke_2(rcvr, arg1)
         return self.invoke_2(rcvr, arg2)
 
-    def invoke_3_tier2(self, rcvr, arg1, arg2, ctx=None):
+    def invoke_3_tier3(self, rcvr, arg1, arg2, hybrid=False, ctx=None):
         if self._arg_idx == 1:
-            return self.invoke_2_tier2(rcvr, arg1)
-        return self.invoke_2_tier2(rcvr, arg2)
+            return self.invoke_2_tier3(rcvr, arg1, hybrid)
+        return self.invoke_2_tier3(rcvr, arg2, hybrid)
 
     def invoke_4(self, rcvr, arg1, arg2, arg3, ctx=None):
         if self._arg_idx == 1:
@@ -318,11 +318,11 @@ class FieldWrite(AbstractTrivialMethod):
             rcvr,
         )
 
-    def invoke_n_tier2(self, stack, stack_ptr, ctx=None):
+    def invoke_n_tier3(self, stack, stack_ptr, hybrid=False, ctx=None):
         num_args = self._signature.get_number_of_signature_arguments()
         rcvr = stack[stack_ptr - (num_args - 1)]
         arg = stack[stack_ptr - (num_args - self._arg_idx)]
-        self.invoke_2_tier2(rcvr, arg)
+        self.invoke_2_tier3(rcvr, arg, hybrid)
         return stack_pop_old_arguments_and_push_result(
             stack,
             stack_ptr,
