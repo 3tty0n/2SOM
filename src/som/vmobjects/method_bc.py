@@ -43,8 +43,9 @@ from som.interpreter.bc.frame import (
 from som.interpreter.bc.interpreter import interpret
 from som.interpreter.bc.interpreter_tier3 import interpret_tier3
 from som.interpreter.bc.interpreter_inliner import interpret_inliner
+from som.interpreter.bc.interpreter_lean3 import interpret_lean3
 from som.interpreter.control_flow import ReturnException
-from som.tier_type import is_tier4, MODE_INLINER
+from som.tier_type import is_tier4, MODE_INLINE, MODE_INLINER
 from som.vmobjects.abstract_object import AbstractObject
 from som.vmobjects.method import AbstractMethod
 
@@ -331,11 +332,34 @@ def _interp_with_nlr(method, new_frame, max_stack_size):
 
 
 def _interpret_tier3_mode(method, new_frame, max_stack_size, hybrid):
-    # In the tier-4 binary a warm activation runs the dedicated lean inliner
-    # interpreter; committed modes run the shared tier-3 interpreter. Elsewhere
+    # In the tier-4 binary route each activation to its dedicated graph: warm ->
+    # the lean inliner interpreter, committed tier 3 -> the lean tier-3 interpreter
+    # (adaptive_tier is quasi-immutable, so the read folds in traces); hybrid and
+    # uncommitted/profiling activations run the shared interpreter. Elsewhere
     # is_tier4() folds False and this is just the old interpret_tier3 call.
-    if is_tier4() and hybrid == MODE_INLINER:
-        return interpret_inliner(method, new_frame, max_stack_size)
+    if is_tier4():
+        if hybrid == MODE_INLINER:
+            return interpret_inliner(method, new_frame, max_stack_size)
+        if hybrid == MODE_INLINE:
+            at = method.adaptive_tier
+            if at == 2:
+                # Warm callee on the inline-invoke path (sends from committed
+                # code). Without counting here a method hot only through this
+                # path never reaches promote_inv and stays warm forever -- on
+                # DeltaBlue 7 collection blocks stuck warm cost 23% steady.
+                from som.interpreter.bc.adaptive import warm_callee_invocation
+
+                warm_callee_invocation(method)
+                if method.adaptive_tier == 2:
+                    return interpret_inliner(method, new_frame, max_stack_size)
+                at = method.adaptive_tier
+            if at != 4:
+                # Committed tier 3 AND undecided (0) both run the lean graph:
+                # methods reached only via sends never enter the controller, so
+                # without this they trace forever in the bloated shared graph
+                # (DeltaBlue's hottest loops, e.g. Planner>>makePlan:, compiled
+                # there). Profiling activations use _run_profiling instead.
+                return interpret_lean3(method, new_frame, max_stack_size)
     return interpret_tier3(method, new_frame, max_stack_size, hybrid=hybrid)
 
 
@@ -566,6 +590,13 @@ class BcMethod(BcAbstractMethod):
         # Called by the adaptive controller; overridden by BcMethodNLR to add
         # non-local-return handling.
         return _interpret_tier3_mode(self, frame, max_stack_size, hybrid)
+
+    def _run_profiling(self, frame, max_stack_size):
+        # Profile-gate activation: must run the SHARED interpreter, whose send
+        # handlers carry the operand/layout profiling hooks (the lean graphs
+        # deliberately have none). Non-local returns are handled by the
+        # controller's outer wrapper, as for _run_tier3.
+        return interpret_tier3(self, frame, max_stack_size, hybrid=False)
 
     def merge_scope_into(self, mgenc):
         mgenc.merge_into_scope(self._lexical_scope)

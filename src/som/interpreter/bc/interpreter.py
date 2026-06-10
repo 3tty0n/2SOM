@@ -84,8 +84,11 @@ def interpret(method, frame, max_stack_size, dummy=False):
         # the generic invoke_1. adaptive_tier is quasi-immutable, so `at` folds in the
         # trace; a trace compiled while warm is invalidated by the promotion write.
         at = method.adaptive_tier
-        if at == 3 or at == 4:
-            return interpret_tier3(method, frame, max_stack_size, hybrid=at == 4)
+        if at == 3:
+            from som.interpreter.bc.interpreter_lean3 import interpret_lean3
+            return interpret_lean3(method, frame, max_stack_size)
+        if at == 4:
+            return interpret_tier3(method, frame, max_stack_size, hybrid=True)
         # Undecided (0) and warm (2) go through the controller, which counts warm
         # activations off-trace toward the promotion threshold.
         from som.interpreter.bc.adaptive import _adaptive_tier4

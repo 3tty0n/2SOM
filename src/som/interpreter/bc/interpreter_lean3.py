@@ -1,15 +1,12 @@
-"""Dedicated warm-phase (stack inliner, tier 2) interpreter for the tier-4 binary.
+"""Dedicated interpreter for COMMITTED tier-3 methods in the tier-4 binary.
 
-A separate interpreter graph containing only the inliner behaviour (every send
-residualized, no hybrid/mega routes, no in-trace profiling), with its own JitDriver.
-This keeps warm traces as lean as the dedicated SOM_TIER=2 binary's -- which the
-shared interpret_tier3 cannot, since is_inliner() folds False in the tier-4 binary.
-The driver compiles early (per-driver threshold, inliner_configure); promotion is the
-quasi-immutable adaptive_tier read at the merge point, whose write invalidates warm
-traces and exits to interpret_tier3 at the current bytecode.
+A lean clone of interpret_tier3 with the hybrid/mega/profiling arms removed, so
+committed code traces as cheaply as the dedicated SOM_TIER=3 binary -- which the
+shared interpret_tier3 cannot, since its adaptive machinery stays live there.
+It has its own JitDriver; committed traces come out of this lean graph.
 
-Only the tier-4 binary calls this (method_bc._interpret_tier3_mode); elsewhere the
-call site folds away behind is_tier4().
+Only the tier-4 binary calls this (method_bc._interpret_tier3_mode, routed on the
+quasi-immutable adaptive_tier == 3).
 """
 from som.interpreter.ast.frame import (
     read_frame,
@@ -22,19 +19,7 @@ from som.interpreter.ast.frame import (
 from som.interpreter.bc.bytecodes import bytecode_length, Bytecodes, bytecode_as_str
 from som.interpreter.bc.frame import get_block_at, get_self_dynamically
 from som.interpreter.send import lookup_and_send_2_tier3
-from som.interpreter.bc.residual import (
-    site_kind,
-    is_arith_kind,
-    is_predicate_kind,
-    _residual_send_1,
-    _residual_send_2,
-    _residual_send_3,
-    _residual_send_4,
-    _residual_send_n,
-)
 from som.interpreter.bc.interpreter_tier3 import (
-    interpret_tier3,
-    _residual_2,
     _do_return_non_local,
     _do_super_send_tier3,
     _lookup,
@@ -44,9 +29,7 @@ from som.interpreter.bc.interpreter_tier3 import (
     _not_yet_implemented,
     get_self,
 )
-from som.interpreter.bc.adaptive import _profile, _profile_layout
-from som.interpreter.bc.interpreter_lean3 import interpret_lean3
-from som.tier_type import MODE_HYBRID
+from som.tier_type import MODE_INLINE
 from som.vm.globals import nilObject, trueObject, falseObject
 from som.vmobjects.block_bc import BcBlock
 from som.vmobjects.integer import int_0, int_1
@@ -56,15 +39,15 @@ from rlib.jit import promote, we_are_jitted
 
 
 @jit.unroll_safe
-def interpret_inliner(method, frame, max_stack_size):
+def interpret_lean3(method, frame, max_stack_size, current_bc_idx=0, stack=None, stack_ptr=-1):
     from som.vm.current import current_universe
 
-    current_bc_idx = 0
-    stack_ptr = -1
-    stack = [None] * max_stack_size
+    if not stack:
+        stack_ptr = -1
+        stack = [None] * max_stack_size
 
     while True:
-        inliner_jitdriver.jit_merge_point(
+        lean3_jitdriver.jit_merge_point(
             current_bc_idx=current_bc_idx,
             stack_ptr=stack_ptr,
             method=method,
@@ -72,21 +55,13 @@ def interpret_inliner(method, frame, max_stack_size):
             stack=stack,
         )
 
-        # Promotion exit: adaptive_tier is quasi-immutable, so the controller's
-        # promotion write invalidates the warm trace and the loop continues in the
-        # committed interpreter at the same bytecode. Pass len(stack) rather than
-        # max_stack_size: keeping the latter live across the merge point would
-        # require it as a red, and len(stack) == max_stack_size here.
-        at = method.adaptive_tier
-        if at == 3:
-            return interpret_lean3(
-                method, frame, len(stack), current_bc_idx, stack, stack_ptr
-            )
-        if at == 4:
-            return interpret_tier3(
-                method, frame, len(stack), current_bc_idx, stack, stack_ptr,
-                MODE_HYBRID,
-            )
+        # Deliberately NO adaptive_tier read here: inline-mode execution is correct
+        # for every tier, and reading it would make each lean3 trace of a still-
+        # undecided method depend on the quasi-immutable -- the 0->2 warm decision
+        # and the 2->3 promotion would then invalidate and recompile every such
+        # trace (triple compilation; Experiment1 0.70 -> 1.02). Routing keeps warm
+        # and hybrid activations out of this graph; stale traces left by the legacy
+        # controller's 3->4 re-decision still run correct inline code.
 
         bytecode = method.get_bytecode(current_bc_idx)
 
@@ -338,15 +313,9 @@ def interpret_inliner(method, frame, max_stack_size):
             receiver = stack[stack_ptr]
 
             layout = receiver.get_object_layout(current_universe)
-            if not we_are_jitted():
-                # mega detection: count receiver classes once the 2-entry IC overflowed
-                l1 = method.get_inline_cache_layout(current_bc_idx)
-                l2 = method.get_inline_cache_layout(current_bc_idx + 1)
-                if l1 is not None and l2 is not None and layout is not l1 and layout is not l2:
-                    _profile_layout(method, current_bc_idx, signature, layout)
             invokable = _lookup(layout, signature, method, current_bc_idx)
             if invokable is not None:
-                stack[stack_ptr] = _residual_send_1(method, invokable, receiver)
+                stack[stack_ptr] = invokable.invoke_1_tier3(receiver, MODE_INLINE)
             elif not layout.is_latest:
                 _update_object_and_invalidate_old_caches(
                     receiver, method, current_bc_idx, current_universe
@@ -362,25 +331,13 @@ def interpret_inliner(method, frame, max_stack_size):
             receiver = stack[stack_ptr - 1]
 
             layout = receiver.get_object_layout(current_universe)
-            if not we_are_jitted():
-                # mega detection (see send_1)
-                l1 = method.get_inline_cache_layout(current_bc_idx)
-                l2 = method.get_inline_cache_layout(current_bc_idx + 1)
-                if l1 is not None and l2 is not None and layout is not l1 and layout is not l2:
-                    _profile_layout(method, current_bc_idx, signature, layout)
             invokable = _lookup(layout, signature, method, current_bc_idx)
             if invokable is not None:
                 arg = stack[stack_ptr]
                 if we_are_jitted():
                     stack[stack_ptr] = None
                 stack_ptr -= 1
-                kind = site_kind(method, current_bc_idx, signature)
-                if not we_are_jitted() and (
-                    is_arith_kind(kind) or is_predicate_kind(kind)
-                ):
-                    # operand-shape profile feeding the promotion decision
-                    _profile(method, current_bc_idx, kind, receiver, arg)
-                stack[stack_ptr] = _residual_2(method, invokable, kind, receiver, arg)
+                stack[stack_ptr] = invokable.invoke_2_tier3(receiver, arg, MODE_INLINE)
             elif not layout.is_latest:
                 _update_object_and_invalidate_old_caches(
                     receiver, method, current_bc_idx, current_universe
@@ -406,8 +363,8 @@ def interpret_inliner(method, frame, max_stack_size):
                     stack[stack_ptr - 1] = None
 
                 stack_ptr -= 2
-                stack[stack_ptr] = _residual_send_3(
-                    method, invokable, receiver, arg1, arg2
+                stack[stack_ptr] = invokable.invoke_3_tier3(
+                    receiver, arg1, arg2, MODE_INLINE
                 )
             elif not layout.is_latest:
                 _update_object_and_invalidate_old_caches(
@@ -436,8 +393,8 @@ def interpret_inliner(method, frame, max_stack_size):
                     stack[stack_ptr - 2] = None
 
                 stack_ptr -= 3
-                stack[stack_ptr] = _residual_send_4(
-                    method, invokable, receiver, arg1, arg2, arg3
+                stack[stack_ptr] = invokable.invoke_4_tier3(
+                    receiver, arg1, arg2, arg3, MODE_INLINE
                 )
             elif not layout.is_latest:
                 _update_object_and_invalidate_old_caches(
@@ -458,7 +415,7 @@ def interpret_inliner(method, frame, max_stack_size):
             layout = receiver.get_object_layout(current_universe)
             invokable = _lookup(layout, signature, method, current_bc_idx)
             if invokable is not None:
-                stack_ptr = _residual_send_n(method, invokable, stack, stack_ptr)
+                stack_ptr = invokable.invoke_n_tier3(stack, stack_ptr, MODE_INLINE)
             elif not layout.is_latest:
                 _update_object_and_invalidate_old_caches(
                     receiver, method, current_bc_idx, current_universe
@@ -566,7 +523,7 @@ def interpret_inliner(method, frame, max_stack_size):
 
         elif bytecode == Bytecodes.jump_backward:
             next_bc_idx = current_bc_idx - method.get_bytecode(current_bc_idx + 1)
-            inliner_jitdriver.can_enter_jit(
+            lean3_jitdriver.can_enter_jit(
                 current_bc_idx=next_bc_idx,
                 stack_ptr=stack_ptr,
                 method=method,
@@ -651,7 +608,7 @@ def interpret_inliner(method, frame, max_stack_size):
                 method.get_bytecode(current_bc_idx + 1)
                 + (method.get_bytecode(current_bc_idx + 2) << 8)
             )
-            inliner_jitdriver.can_enter_jit(
+            lean3_jitdriver.can_enter_jit(
                 current_bc_idx=next_bc_idx,
                 stack_ptr=stack_ptr,
                 method=method,
@@ -661,7 +618,7 @@ def interpret_inliner(method, frame, max_stack_size):
 
         elif bytecode == Bytecodes.q_super_send_1:
             invokable = method.get_inline_cache_invokable(current_bc_idx)
-            stack[stack_ptr] = _residual_send_1(method, invokable, stack[stack_ptr])
+            stack[stack_ptr] = invokable.invoke_1_tier3(stack[stack_ptr], MODE_INLINE)
 
         elif bytecode == Bytecodes.q_super_send_2:
             invokable = method.get_inline_cache_invokable(current_bc_idx)
@@ -669,9 +626,7 @@ def interpret_inliner(method, frame, max_stack_size):
             if we_are_jitted():
                 stack[stack_ptr] = None
             stack_ptr -= 1
-            stack[stack_ptr] = _residual_send_2(
-                method, invokable, stack[stack_ptr], arg
-            )
+            stack[stack_ptr] = invokable.invoke_2_tier3(stack[stack_ptr], arg, MODE_INLINE)
 
         elif bytecode == Bytecodes.q_super_send_3:
             invokable = method.get_inline_cache_invokable(current_bc_idx)
@@ -681,9 +636,7 @@ def interpret_inliner(method, frame, max_stack_size):
                 stack[stack_ptr] = None
                 stack[stack_ptr - 1] = None
             stack_ptr -= 2
-            stack[stack_ptr] = _residual_send_3(
-                method, invokable, stack[stack_ptr], arg1, arg2
-            )
+            stack[stack_ptr] = invokable.invoke_3_tier3(stack[stack_ptr], arg1, arg2, MODE_INLINE)
 
         elif bytecode == Bytecodes.q_super_send_4:
             invokable = method.get_inline_cache_invokable(current_bc_idx)
@@ -695,13 +648,11 @@ def interpret_inliner(method, frame, max_stack_size):
                 stack[stack_ptr - 1] = None
                 stack[stack_ptr - 2] = None
             stack_ptr -= 3
-            stack[stack_ptr] = _residual_send_4(
-                method, invokable, stack[stack_ptr], arg1, arg2, arg3
-            )
+            stack[stack_ptr] = invokable.invoke_4_tier3(stack[stack_ptr], arg1, arg2, arg3, MODE_INLINE)
 
         elif bytecode == Bytecodes.q_super_send_n:
             invokable = method.get_inline_cache_invokable(current_bc_idx)
-            stack_ptr = _residual_send_n(method, invokable, stack, stack_ptr)
+            stack_ptr = invokable.invoke_n(stack, stack_ptr)
 
         elif bytecode == Bytecodes.push_local:
             method.patch_variable_access(current_bc_idx)
@@ -729,48 +680,24 @@ def interpret_inliner(method, frame, max_stack_size):
         current_bc_idx = next_bc_idx
 
 
-def get_printable_location_inliner(bytecode_index, method):
+def get_printable_location_lean3(bytecode_index, method):
     from som.vmobjects.method_bc import BcAbstractMethod
 
     assert isinstance(method, BcAbstractMethod)
     bc = method.get_bytecode(bytecode_index)
-    return "warm: %s @ %d in %s" % (
+    return "t3: %s @ %d in %s" % (
         bytecode_as_str(bc),
         bytecode_index,
         method.merge_point_string(),
     )
 
 
-# Dedicated warm-phase driver: separate from interpreter_tier3.jitdriver so warm
-# traces come out of this lean graph and the threshold can be set per-driver.
-inliner_jitdriver = jit.JitDriver(
-    name="Inliner",
+# Dedicated committed-tier-3 driver: separate from the shared interpreter's jitdriver
+# so committed traces come out of this lean graph (no hybrid/mega/profiling arms).
+lean3_jitdriver = jit.JitDriver(
+    name="Tier3",
     greens=["current_bc_idx", "method"],
-    # reds grouped by kind: INTs, then REFs.
     reds=["stack_ptr", "frame", "stack"],
-    get_printable_location=get_printable_location_inliner,
+    get_printable_location=get_printable_location_lean3,
     should_unroll_one_iteration=lambda current_bc_idx, method: True,
 )
-
-
-def _env_int(name, default):
-    import os
-
-    v = os.environ.get(name)
-    if v is None:
-        return default
-    try:
-        return int(v)
-    except ValueError:
-        return default
-
-
-def inliner_configure():
-    """Set the per-driver JIT params for the warm-phase driver (tier-4 binary only,
-    from universe.main at startup). Warm traces are cheap, so this driver compiles
-    earlier than tier 3. SOM_T4_WARM_THRESHOLD / SOM_T4_WARM_EAGERNESS override."""
-    threshold = _env_int("SOM_T4_WARM_THRESHOLD", 131)
-    eagerness = _env_int("SOM_T4_WARM_EAGERNESS", 32)
-    jit.set_param(inliner_jitdriver, "threshold", threshold)
-    jit.set_param(inliner_jitdriver, "function_threshold", threshold * 2)
-    jit.set_param(inliner_jitdriver, "trace_eagerness", eagerness)
