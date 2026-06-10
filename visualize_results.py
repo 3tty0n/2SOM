@@ -400,20 +400,20 @@ def main(argv=None):
     # ---- figures ----
     written = []
     gm = plot_summary(summary, baseline, contender,
-                      os.path.join(args.out_dir, "speedup_summary.png"))
+                      os.path.join(args.out_dir, "speedup_summary.pdf"))
     if gm is not None:
-        written.append("speedup_summary.png")
+        written.append("speedup_summary.pdf")
 
     wu = plot_warmup(cont_benches, baseline, contender,
-                     os.path.join(args.out_dir, "warmup.png"),
+                     os.path.join(args.out_dir, "warmup.pdf"),
                      head=args.warmup_head)
     if wu:
-        written.append("warmup.png")
+        written.append("warmup.pdf")
 
     be = plot_break_even(cont_benches, baseline, contender,
-                         os.path.join(args.out_dir, "break_even.png"))
+                         os.path.join(args.out_dir, "break_even.pdf"))
     if be:
-        written.append("break_even.png")
+        written.append("break_even.pdf")
         print("\n=== break-even iterations (continuous execution) ===")
         for suite, bench, k, n in be:
             where = ("iter %d / %d" % (k, n)) if k else "none within %d" % n
@@ -425,9 +425,9 @@ def main(argv=None):
               "micro-steady / macro-steady suites to populate them)")
 
     dist = plot_distributions(shot_benches, baseline, contender,
-                              os.path.join(args.out_dir, "distributions.png"))
+                              os.path.join(args.out_dir, "distributions.pdf"))
     if dist:
-        written.append("distributions.png")
+        written.append("distributions.pdf")
 
     if written:
         print("\nwrote: %s" % ", ".join(
