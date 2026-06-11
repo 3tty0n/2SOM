@@ -24,7 +24,7 @@ from som.interpreter.bc.hints import (
 from som.interpreter.bc.tier_shifting import ContinueInTier1, ContinueInTier2, tier_manager
 from som.interpreter.control_flow import ReturnException
 from som.interpreter.send import lookup_and_send_2, lookup_and_send_3, lookup_and_send_2_tier3, lookup_and_send_3_tier3
-from som.tier_type import is_hybrid, is_tier1, is_tier3
+from som.tier_type import is_hybrid, is_tier1, is_tier3, is_tier4
 from som.vm.globals import nilObject, trueObject, falseObject
 from som.vmobjects.array import Array
 from som.vmobjects.block_bc import BcBlock
@@ -1011,7 +1011,10 @@ def interpret_tier1(
         elif bytecode == Bytecodes.send_1:
             if we_are_jitted():
                 rcvr_type = method.get_receiver_type(current_bc_idx)
-                if rcvr_type is None:
+                # In the tier-4 binary the IC fast path is folded out: a chain
+                # pinning a call_assembler into a callee's tier-1 trace would go
+                # stale once that callee promotes to its committed tier.
+                if is_tier4() or rcvr_type is None:
                     next_bc_idx = _send_1(
                         current_bc_idx,
                         next_bc_idx,
@@ -1077,7 +1080,7 @@ def interpret_tier1(
         elif bytecode == Bytecodes.send_2:
             if we_are_jitted():
                 rcvr_type = method.get_receiver_type(current_bc_idx)
-                if rcvr_type is None:
+                if is_tier4() or rcvr_type is None:
                     next_bc_idx = _send_2(
                         current_bc_idx,
                         next_bc_idx,
@@ -1124,7 +1127,7 @@ def interpret_tier1(
         elif bytecode == Bytecodes.send_3:
             if we_are_jitted():
                 rcvr_type = method.get_receiver_type(current_bc_idx)
-                if rcvr_type is None:
+                if is_tier4() or rcvr_type is None:
                     next_bc_idx = _send_3(
                         current_bc_idx,
                         next_bc_idx,
@@ -1171,7 +1174,7 @@ def interpret_tier1(
         elif bytecode == Bytecodes.send_4:
             if we_are_jitted():
                 rcvr_type = method.get_receiver_type(current_bc_idx)
-                if rcvr_type is None:
+                if is_tier4() or rcvr_type is None:
                     next_bc_idx = _send_4(
                         current_bc_idx,
                         next_bc_idx,
@@ -1400,6 +1403,14 @@ def interpret_tier1(
         elif bytecode == Bytecodes.jump_backward:
             target_bc_idx = current_bc_idx - method.get_bytecode(current_bc_idx + 1)
 
+            if is_tier4():
+                # COLD escape: past the back-edge budget this activation finishes
+                # in the lean tier-3 graph (caught in BcMethod._run_tier1).
+                from som.interpreter.bc.adaptive import cold_backedge
+
+                if cold_backedge(method) and tstack.t_is_empty():
+                    raise ContinueInTier2(method, frame, stack, current_bc_idx)
+
             if is_hybrid():
                 if method._counts[current_bc_idx] > TRACE_THRESHOLD and tstack.t_is_empty():
                     raise ContinueInTier2(method, frame, stack, current_bc_idx)
@@ -1554,6 +1565,13 @@ def interpret_tier1(
                 method.get_bytecode(current_bc_idx + 1)
                 + (method.get_bytecode(current_bc_idx + 2) << 8)
             )
+
+            if is_tier4():
+                # COLD escape (see jump_backward).
+                from som.interpreter.bc.adaptive import cold_backedge
+
+                if cold_backedge(method) and tstack.t_is_empty():
+                    raise ContinueInTier2(method, frame, stack, current_bc_idx)
 
             if is_hybrid():
                 if method._counts[current_bc_idx] > TRACE_THRESHOLD and tstack.t_is_empty():
@@ -1812,3 +1830,28 @@ tier1jitdriver = jit.JitDriver(
     threaded_code_gen=True,
     conditions=["_is_true_object", "_is_false_object", "_is_greater_two"],
 )
+
+
+def _env_int(name, default):
+    import os
+
+    v = os.environ.get(name)
+    if v is None:
+        return default
+    try:
+        return int(v)
+    except ValueError:
+        return default
+
+
+def tier1_configure():
+    """Set the per-driver JIT params for the cold-phase threaded-code driver
+    (tier-4 binary only, from universe.main at startup). Threaded chains are the
+    cheapest traces of all, so this driver compiles earliest -- a cold loop must
+    get its chain well within the cold_ops back-edge budget to profit from it.
+    SOM_T1_THRESHOLD / SOM_T1_EAGERNESS override."""
+    threshold = _env_int("SOM_T1_THRESHOLD", 57)
+    eagerness = _env_int("SOM_T1_EAGERNESS", 16)
+    jit.set_param(tier1jitdriver, "threshold", threshold)
+    jit.set_param(tier1jitdriver, "function_threshold", threshold * 2)
+    jit.set_param(tier1jitdriver, "trace_eagerness", eagerness)

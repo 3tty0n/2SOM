@@ -544,6 +544,9 @@ def main(args):
         # Warm-phase driver compiles earlier than tier 3 (cheap traces).
         from som.interpreter.bc.interpreter_inliner import inliner_configure
         inliner_configure()
+        # Cold-phase threaded-code driver compiles earliest (cheapest traces).
+        from som.interpreter.bc.interpreter_tier1 import tier1_configure
+        tier1_configure()
     from som.vm.current import current_universe
     from som.statistics import statistics
 

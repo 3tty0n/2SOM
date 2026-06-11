@@ -44,6 +44,7 @@ from som.interpreter.bc.interpreter import interpret
 from som.interpreter.bc.interpreter_tier3 import interpret_tier3
 from som.interpreter.bc.interpreter_inliner import interpret_inliner
 from som.interpreter.bc.interpreter_lean3 import interpret_lean3
+from som.interpreter.bc.tier_shifting import ContinueInTier2
 from som.interpreter.control_flow import ReturnException
 from som.tier_type import is_tier4, MODE_INLINE, MODE_INLINER
 from som.vmobjects.abstract_object import AbstractObject
@@ -138,6 +139,11 @@ class BcAbstractMethod(AbstractMethod):
         self.warm_invocations = 0
         self.warm_ops = 0
         self.warm_epoch = 0             # drain clock value at warm commit
+        # Cold-phase (threaded code, tier 1) counters: activations spent cold, and
+        # back-edges executed while cold (the OSR escape budget -- see
+        # adaptive.cold_backedge).
+        self.cold_invocations = 0
+        self.cold_ops = 0
         self.ab_round = 0               # A/B round counter (even=tier3, odd=tier4)
         self.t3_min = 0.0               # best-of-min timing for tier 3 (inline)
         self.t4_min = 0.0               # best-of-min timing for tier 4 (hybrid)
@@ -591,6 +597,28 @@ class BcMethod(BcAbstractMethod):
         # Called by the adaptive controller; overridden by BcMethodNLR to add
         # non-local-return handling.
         return _interpret_tier3_mode(self, frame, max_stack_size, hybrid)
+
+    def _run_tier1(self, frame, max_stack_size):
+        # COLD activation: run the threaded-code interpreter (tier 1). An
+        # activation that spends its back-edge budget escapes mid-method via
+        # ContinueInTier2 and finishes in the lean tier-3 graph at the same
+        # bytecode index (the tier-1 Stack carries the flat items/stack_ptr the
+        # lean graph resumes from). Non-local returns are handled by the
+        # controller's outer wrapper, as for _run_tier3.
+        from som.interpreter.bc.interpreter_tier1 import interpret_tier1
+
+        try:
+            return interpret_tier1(self, frame, max_stack_size)
+        except ContinueInTier2 as e:
+            stack = e.stack
+            return interpret_lean3(
+                e.method,
+                e.frame,
+                max_stack_size,
+                e.bytecode_index,
+                stack.items,
+                stack.stack_ptr,
+            )
 
     def _run_profiling(self, frame, max_stack_size):
         # Profile-gate activation: must run the SHARED interpreter, whose send

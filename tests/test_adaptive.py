@@ -43,6 +43,8 @@ class FakeMethod(object):
         self.adaptive_invocations = 0
         self.warm_invocations = 0
         self.warm_ops = 0
+        self.cold_invocations = 0
+        self.cold_ops = 0
         self.ab_round = 0
         self.t3_min = 0.0
         self.t4_min = 0.0
@@ -63,6 +65,10 @@ class FakeMethod(object):
         self.runs.append(adaptive.MODE_INLINE)
         return "ok"
 
+    def _run_tier1(self, frame, max_stack_size):
+        self.runs.append("tier1")
+        return "ok"
+
 
 def _reset_cfg():
     # restore shipped defaults (tests mutate _t4cfg)
@@ -78,6 +84,11 @@ def _reset_cfg():
     adaptive._t4cfg.freeze = 512
     adaptive._t4cfg.minn = 50
     adaptive._t4cfg.bailfloor = 8
+    # cold phase off by default: existing tests assume first activations go to
+    # profiling; dedicated cold tests re-enable it explicitly.
+    adaptive._t4cfg.cold_enabled = 0
+    adaptive._t4cfg.cold_inv = 16
+    adaptive._t4cfg.cold_ops = 4096
     # warm phase off by default in these tests: the controller-decision tests below
     # assert the LEGACY direct commits; the warm tests enable it explicitly.
     adaptive._t4cfg.warm_enabled = 0
@@ -331,4 +342,95 @@ def test_warm_disabled_keeps_legacy_commit():
     m._cnt_a[0] = 1000
     adaptive._adaptive_tier4(m, None, 0)
     assert m.adaptive_tier == 3                  # direct legacy commit
+    assert m.runs[-1] == adaptive.MODE_INLINE
+
+
+# --- cold phase (threaded code, tier 1) -----------------------------------------
+
+def test_cold_phase_runs_tier1_first():
+    # First cold_inv activations should call _run_tier1 and not consume the
+    # profile gate (adaptive_invocations is wound back each time).
+    _reset_cfg()
+    adaptive._t4cfg.cold_enabled = 1
+    adaptive._t4cfg.cold_inv = 2
+    adaptive._t4cfg.cold_ops = 4096
+    adaptive._t4state.start_time = adaptive._rtime()
+    m = FakeMethod(5)
+    # first cold activation: tier1 runs, adaptive_invocations stays 0
+    adaptive._adaptive_tier4(m, None, 0)
+    assert m.runs == ["tier1"]
+    assert m.cold_invocations == 1
+    assert m.adaptive_invocations == 0  # wound back
+    # second cold activation
+    adaptive._adaptive_tier4(m, None, 0)
+    assert m.runs == ["tier1", "tier1"]
+    assert m.cold_invocations == 2
+    assert m.adaptive_invocations == 0
+    # third activation: cold budget exhausted, falls through to profiling
+    adaptive._adaptive_tier4(m, None, 0)
+    assert m.runs[-1] == adaptive.MODE_INLINE   # profiling pass
+    assert m.adaptive_invocations == 1          # profiling now counts
+
+
+def test_cold_backedge_budget():
+    # cold_backedge returns False until cold_ops is reached, then True.
+    _reset_cfg()
+    adaptive._t4cfg.cold_enabled = 1
+    adaptive._t4cfg.cold_ops = 4
+    m = FakeMethod(5)
+    assert adaptive.cold_backedge(m) is False   # 1
+    assert adaptive.cold_backedge(m) is False   # 2
+    assert adaptive.cold_backedge(m) is False   # 3
+    assert adaptive.cold_backedge(m) is True    # 4 == budget -> escape
+
+    # a method whose cold_ops already reached the budget skips the cold arm
+    _reset_cfg()
+    adaptive._t4cfg.cold_enabled = 1
+    adaptive._t4cfg.cold_inv = 2
+    adaptive._t4cfg.cold_ops = 4
+    adaptive._t4state.start_time = adaptive._rtime()
+    m2 = FakeMethod(5)
+    m2.cold_ops = 4   # already at budget
+    adaptive._adaptive_tier4(m2, None, 0)
+    assert "tier1" not in m2.runs       # cold arm skipped
+    assert m2.runs[-1] == adaptive.MODE_INLINE  # went straight to profiling
+
+
+def test_cold_disabled_keeps_legacy():
+    # With cold_enabled=0, _run_tier1 is never called.
+    _reset_cfg()                                # cold_enabled already 0
+    m = FakeMethod(5)
+    adaptive._adaptive_tier4(m, None, 0)
+    assert "tier1" not in m.runs
+    assert m.runs[-1] == adaptive.MODE_INLINE  # profiling pass
+
+
+def test_cold_then_warm_then_commit():
+    # Full ladder: cold (tier1 x cold_inv) -> profiling -> warm (tier2) -> commit (tier3).
+    _reset_cfg()
+    adaptive._t4cfg.cold_enabled = 1
+    adaptive._t4cfg.cold_inv = 2
+    adaptive._t4cfg.cold_ops = 4096
+    adaptive._t4cfg.warm_enabled = 1
+    adaptive._t4cfg.promote_inv = 2
+    adaptive._t4state.start_time = adaptive._rtime()
+    m = FakeMethod(5)
+    m._cnt_a[0] = 1000   # monomorphic profile pre-loaded
+
+    # cold phase: first two activations run tier1
+    adaptive._adaptive_tier4(m, None, 0)
+    adaptive._adaptive_tier4(m, None, 0)
+    assert m.runs.count("tier1") == 2
+    assert m.adaptive_tier == 0
+
+    # profiling pass: budget exhausted, controller decides -> warm
+    adaptive._adaptive_tier4(m, None, 0)
+    assert m.adaptive_tier == 2
+    assert m.runs[-1] == adaptive.MODE_INLINER
+
+    # warm activations until promote_inv
+    adaptive._adaptive_tier4(m, None, 0)    # warm_invocations 1
+    assert m.adaptive_tier == 2
+    adaptive._adaptive_tier4(m, None, 0)    # warm_invocations 2 -> promote
+    assert m.adaptive_tier == 3
     assert m.runs[-1] == adaptive.MODE_INLINE

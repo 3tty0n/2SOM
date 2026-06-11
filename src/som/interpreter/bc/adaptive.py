@@ -85,6 +85,23 @@ class _T4Cfg(object):
         # meanwhile bake in adaptive_tier==2 guards/barrier calls on non-constant
         # paths that never heal (DeltaBlue steady 1.2x at 100 iterations).
         self.warm_era = 0.4       # SOM_T4_WARM_ERA_MS / 1000.0
+        # COLD phase: before profiling even starts, an undecided method runs its
+        # first cold_inv activations on the THREADED-CODE interpreter (tier 1).
+        # Cold activations do not consume the profile gate. A single-activation
+        # hot loop escapes mid-method after cold_ops back-edges (cold_backedge ->
+        # ContinueInTier2 -> lean tier-3 resume), mirroring warm's promote_ops.
+        # DEFAULT OFF -- measured a net LOSS as a phase: the tier-1 loop
+        # interprets ~3x slower than the lean graphs (shallow-handler indirection
+        # is built for chain compilation, not interpretation), and threaded
+        # chains never compile within any cold residence that doesn't strangle
+        # warmup (Experiment19 0.22s -> 0.34s at inv=16/ops=4096; threshold
+        # collisions abort recordings at small ops budgets; era-length residence
+        # is ~5x slower and segfaults once chains compile). The cheap-compiled
+        # warmup niche is already taken by the warm inliner tier. Threaded code
+        # pays off as a long-residence STANDALONE tier (SOM_TIER=1), not a phase.
+        self.cold_enabled = 0     # SOM_T4_COLD: 1 enables the experimental cold phase
+        self.cold_inv = 16        # SOM_T4_COLD_INV: cold activations before profiling
+        self.cold_ops = 4096      # SOM_T4_COLD_OPS: cold back-edges before the OSR escape
         # Straggler drain: a warm method older than this many controller DECISIONS
         # promotes at the next decision pass. Low-traffic methods otherwise stay
         # warm forever (their entries stop before promote_inv), and warm-history
@@ -154,6 +171,9 @@ def _t4_configure():
     _t4cfg.mega_floor = _env_int("SOM_CB_MEGA_FLOOR", _t4cfg.mega_floor)
     _t4cfg.mega_probe_max = _env_int("SOM_CB_MEGA_PROBE", _t4cfg.mega_probe_max)
     _t4cfg.warm_enabled = _env_int("SOM_T4_WARM", _t4cfg.warm_enabled)
+    _t4cfg.cold_enabled = _env_int("SOM_T4_COLD", _t4cfg.cold_enabled)
+    _t4cfg.cold_inv = _env_int("SOM_T4_COLD_INV", _t4cfg.cold_inv)
+    _t4cfg.cold_ops = _env_int("SOM_T4_COLD_OPS", _t4cfg.cold_ops)
     _t4cfg.promote_inv = _env_int("SOM_T4_PROMOTE_INV", _t4cfg.promote_inv)
     _t4cfg.promote_ops = _env_int("SOM_T4_PROMOTE_OPS", _t4cfg.promote_ops)
     _t4cfg.warm_era = _env_int("SOM_T4_WARM_ERA_MS", int(_t4cfg.warm_era * 1000)) / 1000.0
@@ -469,6 +489,20 @@ def warm_residual_op(method):
         _promote_warm(method, "ops")
 
 
+# --- cold-phase (threaded code, tier 1) ------------------------------------------
+@jit.dont_look_inside
+def cold_backedge(method):
+    """Count one back-edge of a COLD (threaded-code) activation. True once the
+    activation has looped past the cold budget: the tier-1 loop then escapes to
+    the lean tier-3 graph mid-activation (ContinueInTier2, caught in
+    BcMethod._run_tier1), so a single-activation hot loop never sticks on
+    threaded code. The call is residualised into compiled threaded chains
+    (@dont_look_inside), so chains exit by the same guard."""
+    n = method.cold_ops + 1
+    method.cold_ops = n
+    return n >= _t4cfg.cold_ops
+
+
 # The controller (port of tla.py:_adaptive_tier4). @dont_look_inside: it runs once
 # per outer activation, off any trace, so time() and the A/B logic never pollute one.
 @jit.dont_look_inside
@@ -495,6 +529,19 @@ def _adaptive_tier4(method, frame, max_stack_size):
                 frame, max_stack_size, MODE_HYBRID if at == 4 else MODE_INLINE
             )
         return method._run_tier3(frame, max_stack_size, MODE_INLINER)
+
+    # 0) COLD: run the first activations of an undecided method on the threaded-code
+    #    interpreter (tier 1) -- the cheapest tier while the method may yet be
+    #    cold-forever. Cold activations are rewound off the profile gate so the
+    #    profiling window stays full-length afterwards. Era-bounded like warm; a
+    #    method that spent its back-edge budget escaped mid-loop and skips cold
+    #    for good (its loops are hot -- get them to profiling/commit).
+    if (_t4cfg.cold_enabled and not _warm_era_over()
+            and method.cold_invocations < _t4cfg.cold_inv
+            and method.cold_ops < _t4cfg.cold_ops):
+        method.cold_invocations += 1
+        method.adaptive_invocations -= 1
+        return method._run_tier1(frame, max_stack_size)
 
     # 1) Profile a little, running inline with the profiling window raised so the send
     #    handlers gather the operand-type mix. A site whose distinct receiver-class count
