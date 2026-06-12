@@ -185,8 +185,8 @@ def interpret_tier3(
         stack = [None] * max_stack_size
         if not we_are_jitted():
             method.t5_invocations += 1
-            if _t5cfg.enabled and _t5cfg.era_ms > 0:
-                _t5_era_check()
+            if _t5cfg.enabled and _t5cfg.warmup_ms > 0:
+                _t5_warmup_check()
 
     while True:
         jitdriver.jit_merge_point(
@@ -1068,7 +1068,7 @@ def get_printable_location_tier3(bytecode_index, method):
     )
 
 
-# Tier 5 (era-adaptive inlining): env-gated (SOM_T5=1), default OFF.
+# Tier 5 (adaptive inlining with a warmup phase): env-gated (SOM_T5=1), default OFF.
 # The ladder: 1 threaded code, 2 stack inliner, 3 tracing, 4 adaptive execution
 # placement (which graph runs each method), 5 adaptive trace shaping (what each
 # trace inlines). Unlike tiers 1-4, tier 5 is not a translation-time SOM_TIER --
@@ -1080,12 +1080,12 @@ import os as _os
 
 
 class _T5Cfg(object):
-    _immutable_fields_ = ["enabled?", "era_ms?"]
+    _immutable_fields_ = ["enabled?", "warmup_ms?"]
 
     def __init__(self):
         self.enabled = 0       # SOM_T5: 1 enables adaptive portal inlining (tier 5)
         self.promote_inv = 64  # SOM_T5_PROMOTE_INV: activations before a callee inlines
-        self.era_ms = 400      # SOM_T5_ERA_MS: warm-era length in ms; 0 = counter mode
+        self.warmup_ms = 400      # SOM_T5_WARMUP_MS: warmup-phase length in ms; 0 = counter mode
 
 
 _t5cfg = _T5Cfg()
@@ -1101,8 +1101,8 @@ except ImportError:
         return _t5_pytime.time()
 
 
-class _T5Era(object):
-    # `on` is deliberately a PLAIN mutable field: the era lever is a promoted
+class _T5Warmup(object):
+    # `on` is deliberately a PLAIN mutable field: the warmup lever is a promoted
     # in-trace guard, not quasi-immutable invalidation (an empty marker call
     # gets dead-code-eliminated and the folded read never registers traces).
     def __init__(self):
@@ -1111,26 +1111,26 @@ class _T5Era(object):
         self.tick = 0
 
 
-_t5era = _T5Era()
+_t5warmup = _T5Warmup()
 
 
-def _t5_era_mark():
-    # In-trace era guard at the invocation chokepoint: every trace embeds
-    # guard_value on the era flag at its first send (heap-cached afterwards).
-    # Ending the era fails the guard; the failure bridge is traced post-era,
+def _t5_warmup_mark():
+    # In-trace warmup guard at the invocation chokepoint: every trace embeds
+    # guard_value on the warmup flag at its first send (heap-cached afterwards).
+    # Ending the warmup phase fails the guard; the bridge is traced after it,
     # when _t5_can_never_inline answers False, so hot loops recover full
     # inlining through ordinary bridge compilation. Disabled, the quasi-
     # immutable `enabled` read folds False and traces carry nothing.
     if _t5cfg.enabled:
-        promote(_t5era.on)
+        promote(_t5warmup.on)
 
 
-def _t5_era_check():
+def _t5_warmup_check():
     # off-trace (portal entry); rtime read amortized to every 256th call
-    _t5era.tick += 1
-    if (_t5era.tick & 255) == 0:
-        if _t5era.on and _t5_rtime() >= _t5era.deadline:
-            _t5era.on = False   # quasi-immut write -> kills all era traces
+    _t5warmup.tick += 1
+    if (_t5warmup.tick & 255) == 0:
+        if _t5warmup.on and _t5_rtime() >= _t5warmup.deadline:
+            _t5warmup.on = False   # quasi-immut write -> kills all warmup-phase traces
 
 
 def t5_configure():
@@ -1138,19 +1138,19 @@ def t5_configure():
     _t5cfg.enabled = int(v) if v else _t5cfg.enabled
     v = _os.environ.get("SOM_T5_PROMOTE_INV")
     _t5cfg.promote_inv = int(v) if v else _t5cfg.promote_inv
-    v = _os.environ.get("SOM_T5_ERA_MS")
-    _t5cfg.era_ms = int(v) if v else _t5cfg.era_ms
-    if _t5cfg.enabled and _t5cfg.era_ms > 0:
-        _t5era.deadline = _t5_rtime() + _t5cfg.era_ms / 1000.0
-        _t5era.on = True
+    v = _os.environ.get("SOM_T5_WARMUP_MS")
+    _t5cfg.warmup_ms = int(v) if v else _t5cfg.warmup_ms
+    if _t5cfg.enabled and _t5cfg.warmup_ms > 0:
+        _t5warmup.deadline = _t5_rtime() + _t5cfg.warmup_ms / 1000.0
+        _t5warmup.on = True
 
 
 def _t5_can_never_inline(current_bc_idx, method):
     # Consulted by the tracer on every recursive portal-call decision.
     if not _t5cfg.enabled:
         return False
-    if _t5cfg.era_ms > 0:
-        return _t5era.on
+    if _t5cfg.warmup_ms > 0:
+        return _t5warmup.on
     return method.t5_invocations < _t5cfg.promote_inv
 
 
