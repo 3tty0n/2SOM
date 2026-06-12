@@ -1073,47 +1073,39 @@ def get_printable_location_tier3(bytecode_index, method):
     )
 
 
-# Tier 5 (adaptive inlining with a warmup phase): env-gated (SOM_T5=1), default OFF.
+# Tier 5 (adaptive inlining with a quiescence-gated warmup phase): env-gated
+# (SOM_T5=1), default OFF.
 # The ladder: 1 threaded code, 2 stack inliner, 3 tracing, 4 adaptive execution
 # placement (which graph runs each method), 5 adaptive trace shaping (what each
 # trace inlines). Unlike tiers 1-4, tier 5 is not a translation-time SOM_TIER --
 # it is a runtime mode of the tier-3 binary, decided inside the tracer via the
 # can_never_inline hook.
-# While a method's t5_invocations is below promote_inv, the tracer residualizes
-# calls to it (CALL_ASSEMBLER) instead of inlining; once hot, it inlines.
+# During the warmup phase the tracer residualizes portal calls (CALL_ASSEMBLER)
+# instead of inlining them. The phase ends when the JIT quiesces (no tracing for
+# SOM_T5_QUIESCE activations or SOM_T5_QUIESCE_GC minor GCs); all cheap-phase
+# compiled code is then purged and hot loops retrace with full inlining.
 import os as _os
 
 
 class _T5Cfg(object):
-    _immutable_fields_ = ["enabled?", "warmup_ms?", "quiesce?"]
+    _immutable_fields_ = ["enabled?", "quiesce?"]
 
     def __init__(self):
         self.enabled = 0       # SOM_T5: 1 enables adaptive portal inlining (tier 5)
         self.promote_inv = 64  # SOM_T5_PROMOTE_INV: activations before a callee inlines
-        # Default mode: the warmup phase ends when the JIT QUIESCES -- this many
-        # interpreted activations pass with no tracing activity (event counts
-        # only, no wall clock). A composite that keeps warming new code never
-        # quiesces and stays in the cheap phase for its whole run; a throughput
-        # program quiesces right after its hot set compiles and switches to
-        # full inlining.
+        # The warmup phase ends when the JIT QUIESCES -- this many interpreted
+        # activations pass with no tracing activity (event counts only, no wall
+        # clock). A composite that keeps warming new code never quiesces and
+        # stays in the cheap phase for its whole run; a throughput program
+        # quiesces right after its hot set compiles and switches to full inlining.
         self.quiesce = 30000   # SOM_T5_QUIESCE: activations of silence; 0 = off
         self.quiesce_gc = 32   # SOM_T5_QUIESCE_GC: minor GCs of silence (the
                                # GC clock keeps running where activation ticks
                                # stall under fully-compiled execution)
-        self.warmup_ms = 0     # SOM_T5_WARMUP_MS: wall-clock phase instead; 0 = off
 
 
 _t5cfg = _T5Cfg()
 
-
-try:
-    from rpython.rlib.rtime import time as _t5_rtime
-except ImportError:
-    "NOT_RPYTHON"
-    import time as _t5_pytime
-
-    def _t5_rtime():
-        return _t5_pytime.time()
 
 try:
     from rpython.rlib.nonconst import NonConstant as _nonconst
@@ -1130,7 +1122,6 @@ class _T5Warmup(object):
     # gets dead-code-eliminated and the folded read never registers traces).
     def __init__(self):
         self.on = False
-        self.deadline = 0.0
         self.tick = 0        # interpreted activation entries (merge-point, bc 0)
         self.last_trace = 0  # tick value at the last tracer consultation
         # GC clock: interpreted-activation ticks stall once cheap traces cover
@@ -1186,12 +1177,9 @@ def _t5_warmup_check():
     _t5warmup.tick += 1
     if (_t5warmup.tick & 255) == 0:
         if _t5warmup.on:
-            if _t5cfg.quiesce > 0:
-                # Structural latch: the tracer has been silent for `quiesce`
-                # interpreted activations -> the startup compile storm is over.
-                if _t5warmup.tick - _t5warmup.last_trace > _t5cfg.quiesce:
-                    _t5_end_phase()
-            elif _t5_rtime() >= _t5warmup.deadline:
+            # Structural latch: the tracer has been silent for `quiesce`
+            # interpreted activations -> the startup compile storm is over.
+            if _t5warmup.tick - _t5warmup.last_trace > _t5cfg.quiesce:
                 _t5_end_phase()
 
 
@@ -1226,11 +1214,6 @@ def t5_configure():
     _t5cfg.quiesce = int(v) if v else _t5cfg.quiesce
     v = _os.environ.get("SOM_T5_QUIESCE_GC")
     _t5cfg.quiesce_gc = int(v) if v else _t5cfg.quiesce_gc
-    v = _os.environ.get("SOM_T5_WARMUP_MS")
-    if v:
-        # Explicit wall-clock mode overrides the structural latch.
-        _t5cfg.warmup_ms = int(v)
-        _t5cfg.quiesce = 0
     # Establish generic annotations for the fields written from the GC hook
     # and the tracer hook (both annotated outside the main program); the
     # GcHooksStats.reset pattern in main_rpython documents the same need.
@@ -1239,9 +1222,7 @@ def t5_configure():
     _t5warmup.purge_pending = _nonconst(0)
     _t5warmup.tick = _nonconst(0)
     _t5warmup.last_trace = _nonconst(0)
-    if _t5cfg.enabled and (_t5cfg.quiesce > 0 or _t5cfg.warmup_ms > 0):
-        if _t5cfg.warmup_ms > 0:
-            _t5warmup.deadline = _t5_rtime() + _t5cfg.warmup_ms / 1000.0
+    if _t5cfg.enabled and _t5cfg.quiesce > 0:
         _t5_stamp()
         _t5warmup.on = True
 
@@ -1252,11 +1233,9 @@ def _t5_can_never_inline(current_bc_idx, method):
     # what arms the quiescence latch.
     if not _t5cfg.enabled:
         return False
-    if _t5cfg.quiesce > 0 or _t5cfg.warmup_ms > 0:
-        if _t5warmup.on:
-            _t5_stamp()
-            return True
-        return False
+    if _t5warmup.on:
+        _t5_stamp()
+        return True
     return method.t5_invocations < _t5cfg.promote_inv
 
 
