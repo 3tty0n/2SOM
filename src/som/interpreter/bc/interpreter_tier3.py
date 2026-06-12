@@ -185,8 +185,6 @@ def interpret_tier3(
         stack = [None] * max_stack_size
         if not we_are_jitted():
             method.t5_invocations += 1
-            if _t5cfg.enabled and _t5cfg.warmup_ms > 0:
-                _t5_warmup_check()
 
     while True:
         jitdriver.jit_merge_point(
@@ -201,6 +199,13 @@ def interpret_tier3(
         # Promote the (red) hybrid mode so a committed method's trace specialises to
         # its single steady-state mode.
         hybrid = promote(hybrid)
+
+        # Tier 5 activation tick, at the merge point so it stays live on
+        # trampoline-routed residual calls (their portal entry starts HERE, not
+        # at the function prologue). Folds away inside traces (we_are_jitted).
+        if current_bc_idx == 0 and not we_are_jitted():
+            if _t5cfg.enabled and _t5warmup.on:
+                _t5_warmup_check()
 
         # Warm execution leaves as soon as the method is promoted: adaptive_tier is
         # quasi-immutable, so the promotion write invalidates the warm trace and the
@@ -1080,12 +1085,19 @@ import os as _os
 
 
 class _T5Cfg(object):
-    _immutable_fields_ = ["enabled?", "warmup_ms?"]
+    _immutable_fields_ = ["enabled?", "warmup_ms?", "quiesce?"]
 
     def __init__(self):
         self.enabled = 0       # SOM_T5: 1 enables adaptive portal inlining (tier 5)
         self.promote_inv = 64  # SOM_T5_PROMOTE_INV: activations before a callee inlines
-        self.warmup_ms = 400      # SOM_T5_WARMUP_MS: warmup-phase length in ms; 0 = counter mode
+        # Default mode: the warmup phase ends when the JIT QUIESCES -- this many
+        # interpreted activations pass with no tracing activity (event counts
+        # only, no wall clock). A composite that keeps warming new code never
+        # quiesces and stays in the cheap phase for its whole run; a throughput
+        # program quiesces right after its hot set compiles and switches to
+        # full inlining.
+        self.quiesce = 30000   # SOM_T5_QUIESCE: activations of silence; 0 = off
+        self.warmup_ms = 0     # SOM_T5_WARMUP_MS: wall-clock phase instead; 0 = off
 
 
 _t5cfg = _T5Cfg()
@@ -1108,7 +1120,8 @@ class _T5Warmup(object):
     def __init__(self):
         self.on = False
         self.deadline = 0.0
-        self.tick = 0
+        self.tick = 0        # interpreted activation entries (merge-point, bc 0)
+        self.last_trace = 0  # tick value at the last tracer consultation
 
 
 _t5warmup = _T5Warmup()
@@ -1126,11 +1139,20 @@ def _t5_warmup_mark():
 
 
 def _t5_warmup_check():
-    # off-trace (portal entry); rtime read amortized to every 256th call
+    # Off-trace; called once per INTERPRETED activation entry at the merge
+    # point (bc 0), which stays live on trampoline-routed residual calls --
+    # the portal graph starts AT the merge point, so a prologue-side counter
+    # would freeze once callers compile. Checks amortized to every 256th call.
     _t5warmup.tick += 1
     if (_t5warmup.tick & 255) == 0:
-        if _t5warmup.on and _t5_rtime() >= _t5warmup.deadline:
-            _t5warmup.on = False   # quasi-immut write -> kills all warmup-phase traces
+        if _t5warmup.on:
+            if _t5cfg.quiesce > 0:
+                # Structural latch: the tracer has been silent for `quiesce`
+                # interpreted activations -> the startup compile storm is over.
+                if _t5warmup.tick - _t5warmup.last_trace > _t5cfg.quiesce:
+                    _t5warmup.on = False   # one-way: fails all warmup guards
+            elif _t5_rtime() >= _t5warmup.deadline:
+                _t5warmup.on = False
 
 
 def t5_configure():
@@ -1138,19 +1160,30 @@ def t5_configure():
     _t5cfg.enabled = int(v) if v else _t5cfg.enabled
     v = _os.environ.get("SOM_T5_PROMOTE_INV")
     _t5cfg.promote_inv = int(v) if v else _t5cfg.promote_inv
+    v = _os.environ.get("SOM_T5_QUIESCE")
+    _t5cfg.quiesce = int(v) if v else _t5cfg.quiesce
     v = _os.environ.get("SOM_T5_WARMUP_MS")
-    _t5cfg.warmup_ms = int(v) if v else _t5cfg.warmup_ms
-    if _t5cfg.enabled and _t5cfg.warmup_ms > 0:
-        _t5warmup.deadline = _t5_rtime() + _t5cfg.warmup_ms / 1000.0
+    if v:
+        # Explicit wall-clock mode overrides the structural latch.
+        _t5cfg.warmup_ms = int(v)
+        _t5cfg.quiesce = 0
+    if _t5cfg.enabled and (_t5cfg.quiesce > 0 or _t5cfg.warmup_ms > 0):
+        if _t5cfg.warmup_ms > 0:
+            _t5warmup.deadline = _t5_rtime() + _t5cfg.warmup_ms / 1000.0
         _t5warmup.on = True
 
 
 def _t5_can_never_inline(current_bc_idx, method):
-    # Consulted by the tracer on every recursive portal-call decision.
+    # Consulted by the tracer on every recursive portal-call decision -- which
+    # makes it the tracing-activity signal itself: stamping the tick here is
+    # what arms the quiescence latch.
     if not _t5cfg.enabled:
         return False
-    if _t5cfg.warmup_ms > 0:
-        return _t5warmup.on
+    if _t5cfg.quiesce > 0 or _t5cfg.warmup_ms > 0:
+        if _t5warmup.on:
+            _t5warmup.last_trace = _t5warmup.tick
+            return True
+        return False
     return method.t5_invocations < _t5cfg.promote_inv
 
 
