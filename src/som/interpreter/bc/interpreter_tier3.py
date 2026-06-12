@@ -1138,7 +1138,10 @@ def _t5_warmup_mark():
         promote(_t5warmup.on)
 
 
+@jit.dont_look_inside
 def _t5_end_phase():
+    # dont_look_inside: set_param(None, ...) is a jit_marker the codewriter
+    # cannot rewrite inside a jit-visible graph (driver is None).
     _t5warmup.on = False   # one-way: fails all warmup guards
     # Discard ALL cheap-phase compiled code (fork set_param): every JitCell
     # forgets its procedure token, so hot loops recount and retrace fresh with
