@@ -1,5 +1,11 @@
 *.pyc
 *.DS_Store
+*.data
+*.json
+*.log
+*.html
+*.pdf
+
 som-ast*
 som-bc*
 pypy
