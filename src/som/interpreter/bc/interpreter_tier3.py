@@ -1236,6 +1236,11 @@ def _t5_can_never_inline(current_bc_idx, method):
     if _t5warmup.on:
         _t5_stamp()
         return True
+    if _t5cfg.quiesce > 0:
+        # Latch mode, phase over: inline everything -- post-purge retraces
+        # must reach tier-3 shape; the counter would residualize callees
+        # whose interpreted-activation count happens to sit below the bar.
+        return False
     return method.t5_invocations < _t5cfg.promote_inv
 
 
