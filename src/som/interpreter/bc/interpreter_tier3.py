@@ -184,9 +184,9 @@ def interpret_tier3(
         stack_ptr = -1
         stack = [None] * max_stack_size
         if not we_are_jitted():
-            method.b1_invocations += 1
-            if _b1cfg.enabled and _b1cfg.era_ms > 0:
-                _b1_era_check()
+            method.t5_invocations += 1
+            if _t5cfg.enabled and _t5cfg.era_ms > 0:
+                _t5_era_check()
 
     while True:
         jitdriver.jit_merge_point(
@@ -1068,35 +1068,40 @@ def get_printable_location_tier3(bytecode_index, method):
     )
 
 
-# B1 adaptive portal-inlining prototype: env-gated (SOM_B1=1), default OFF.
-# While a method's b1_invocations is below promote_inv, the tracer residualizes
+# Tier 5 (era-adaptive inlining): env-gated (SOM_T5=1), default OFF.
+# The ladder: 1 threaded code, 2 stack inliner, 3 tracing, 4 adaptive execution
+# placement (which graph runs each method), 5 adaptive trace shaping (what each
+# trace inlines). Unlike tiers 1-4, tier 5 is not a translation-time SOM_TIER --
+# it is a runtime mode of the tier-3 binary, decided inside the tracer via the
+# can_never_inline hook.
+# While a method's t5_invocations is below promote_inv, the tracer residualizes
 # calls to it (CALL_ASSEMBLER) instead of inlining; once hot, it inlines.
 import os as _os
 
 
-class _B1Cfg(object):
+class _T5Cfg(object):
     _immutable_fields_ = ["enabled?", "era_ms?"]
 
     def __init__(self):
-        self.enabled = 0       # SOM_B1: 1 enables adaptive portal inlining (B1 prototype)
-        self.promote_inv = 64  # SOM_B1_PROMOTE_INV: activations before a callee inlines
-        self.era_ms = 400      # SOM_B1_ERA_MS: warm-era length in ms; 0 = counter mode
+        self.enabled = 0       # SOM_T5: 1 enables adaptive portal inlining (tier 5)
+        self.promote_inv = 64  # SOM_T5_PROMOTE_INV: activations before a callee inlines
+        self.era_ms = 400      # SOM_T5_ERA_MS: warm-era length in ms; 0 = counter mode
 
 
-_b1cfg = _B1Cfg()
+_t5cfg = _T5Cfg()
 
 
 try:
-    from rpython.rlib.rtime import time as _b1_rtime
+    from rpython.rlib.rtime import time as _t5_rtime
 except ImportError:
     "NOT_RPYTHON"
-    import time as _b1_pytime
+    import time as _t5_pytime
 
-    def _b1_rtime():
-        return _b1_pytime.time()
+    def _t5_rtime():
+        return _t5_pytime.time()
 
 
-class _B1Era(object):
+class _T5Era(object):
     # `on` is deliberately a PLAIN mutable field: the era lever is a promoted
     # in-trace guard, not quasi-immutable invalidation (an empty marker call
     # gets dead-code-eliminated and the folded read never registers traces).
@@ -1106,47 +1111,47 @@ class _B1Era(object):
         self.tick = 0
 
 
-_b1era = _B1Era()
+_t5era = _T5Era()
 
 
-def _b1_era_mark():
+def _t5_era_mark():
     # In-trace era guard at the invocation chokepoint: every trace embeds
     # guard_value on the era flag at its first send (heap-cached afterwards).
     # Ending the era fails the guard; the failure bridge is traced post-era,
-    # when _b1_can_never_inline answers False, so hot loops recover full
+    # when _t5_can_never_inline answers False, so hot loops recover full
     # inlining through ordinary bridge compilation. Disabled, the quasi-
     # immutable `enabled` read folds False and traces carry nothing.
-    if _b1cfg.enabled:
-        promote(_b1era.on)
+    if _t5cfg.enabled:
+        promote(_t5era.on)
 
 
-def _b1_era_check():
+def _t5_era_check():
     # off-trace (portal entry); rtime read amortized to every 256th call
-    _b1era.tick += 1
-    if (_b1era.tick & 255) == 0:
-        if _b1era.on and _b1_rtime() >= _b1era.deadline:
-            _b1era.on = False   # quasi-immut write -> kills all era traces
+    _t5era.tick += 1
+    if (_t5era.tick & 255) == 0:
+        if _t5era.on and _t5_rtime() >= _t5era.deadline:
+            _t5era.on = False   # quasi-immut write -> kills all era traces
 
 
-def b1_configure():
-    v = _os.environ.get("SOM_B1")
-    _b1cfg.enabled = int(v) if v else _b1cfg.enabled
-    v = _os.environ.get("SOM_B1_PROMOTE_INV")
-    _b1cfg.promote_inv = int(v) if v else _b1cfg.promote_inv
-    v = _os.environ.get("SOM_B1_ERA_MS")
-    _b1cfg.era_ms = int(v) if v else _b1cfg.era_ms
-    if _b1cfg.enabled and _b1cfg.era_ms > 0:
-        _b1era.deadline = _b1_rtime() + _b1cfg.era_ms / 1000.0
-        _b1era.on = True
+def t5_configure():
+    v = _os.environ.get("SOM_T5")
+    _t5cfg.enabled = int(v) if v else _t5cfg.enabled
+    v = _os.environ.get("SOM_T5_PROMOTE_INV")
+    _t5cfg.promote_inv = int(v) if v else _t5cfg.promote_inv
+    v = _os.environ.get("SOM_T5_ERA_MS")
+    _t5cfg.era_ms = int(v) if v else _t5cfg.era_ms
+    if _t5cfg.enabled and _t5cfg.era_ms > 0:
+        _t5era.deadline = _t5_rtime() + _t5cfg.era_ms / 1000.0
+        _t5era.on = True
 
 
-def _b1_can_never_inline(current_bc_idx, method):
+def _t5_can_never_inline(current_bc_idx, method):
     # Consulted by the tracer on every recursive portal-call decision.
-    if not _b1cfg.enabled:
+    if not _t5cfg.enabled:
         return False
-    if _b1cfg.era_ms > 0:
-        return _b1era.on
-    return method.b1_invocations < _b1cfg.promote_inv
+    if _t5cfg.era_ms > 0:
+        return _t5era.on
+    return method.t5_invocations < _t5cfg.promote_inv
 
 
 # `hybrid` is the residualization mode, a jitdriver red (a green would be folded and
@@ -1168,5 +1173,5 @@ jitdriver = jit.JitDriver(
     # inlined once (which means that things like Integer>>< will be inlined
     # into a while loop again, when enabling this drivers).
     should_unroll_one_iteration=lambda current_bc_idx, method: True,
-    can_never_inline=_b1_can_never_inline,
+    can_never_inline=_t5_can_never_inline,
 )

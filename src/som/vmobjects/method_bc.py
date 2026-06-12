@@ -41,7 +41,7 @@ from som.interpreter.bc.frame import (
     create_frame_4
 )
 from som.interpreter.bc.interpreter import interpret
-from som.interpreter.bc.interpreter_tier3 import interpret_tier3, _b1_era_mark
+from som.interpreter.bc.interpreter_tier3 import interpret_tier3, _t5_era_mark
 from som.interpreter.bc.interpreter_inliner import interpret_inliner
 from som.interpreter.bc.interpreter_lean3 import interpret_lean3
 from som.interpreter.bc.tier_shifting import ContinueInTier2
@@ -144,8 +144,8 @@ class BcAbstractMethod(AbstractMethod):
         # adaptive.cold_backedge).
         self.cold_invocations = 0
         self.cold_ops = 0
-        # B1 adaptive portal-inlining prototype: activations seen by this method.
-        self.b1_invocations = 0
+        # Tier 5 (era-adaptive inlining): activations seen by this method.
+        self.t5_invocations = 0
         self.ab_round = 0               # A/B round counter (even=tier3, odd=tier4)
         self.t3_min = 0.0               # best-of-min timing for tier 3 (inline)
         self.t4_min = 0.0               # best-of-min timing for tier 4 (hybrid)
@@ -346,9 +346,9 @@ def _interpret_tier3_mode(method, new_frame, max_stack_size, hybrid):
     # (adaptive_tier is quasi-immutable, so the read folds in traces); hybrid and
     # uncommitted/profiling activations run the shared interpreter. Elsewhere
     # is_tier4() folds False and this is just the old interpret_tier3 call.
-    # B1 era marker: this is the chokepoint every invocation inlines into its
+    # Tier 5 era marker: this is the chokepoint every invocation inlines into its
     # caller's trace, so era traces from ALL drivers register for invalidation.
-    _b1_era_mark()
+    _t5_era_mark()
     if is_tier4():
         if hybrid == MODE_INLINER:
             return interpret_inliner(method, new_frame, max_stack_size)

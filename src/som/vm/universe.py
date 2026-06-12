@@ -541,8 +541,8 @@ def main(args):
     _t4_configure()
     from som.tier_type import is_tier3, is_tier4
     if is_tier3():
-        from som.interpreter.bc.interpreter_tier3 import b1_configure
-        b1_configure()
+        from som.interpreter.bc.interpreter_tier3 import t5_configure
+        t5_configure()
     if is_tier4():
         # Warm-phase driver compiles earlier than tier 3 (cheap traces).
         from som.interpreter.bc.interpreter_inliner import inliner_configure
