@@ -204,7 +204,7 @@ def interpret_tier3(
         # trampoline-routed residual calls (their portal entry starts HERE, not
         # at the function prologue). Folds away inside traces (we_are_jitted).
         if current_bc_idx == 0 and not we_are_jitted():
-            if _t5cfg.enabled and _t5warmup.on:
+            if _t5cfg.enabled and (_t5warmup.on or _t5warmup.purge_pending):
                 _t5_warmup_check()
 
         # Warm execution leaves as soon as the method is promoted: adaptive_tier is
@@ -1097,6 +1097,9 @@ class _T5Cfg(object):
         # program quiesces right after its hot set compiles and switches to
         # full inlining.
         self.quiesce = 30000   # SOM_T5_QUIESCE: activations of silence; 0 = off
+        self.quiesce_gc = 32   # SOM_T5_QUIESCE_GC: minor GCs of silence (the
+                               # GC clock keeps running where activation ticks
+                               # stall under fully-compiled execution)
         self.warmup_ms = 0     # SOM_T5_WARMUP_MS: wall-clock phase instead; 0 = off
 
 
@@ -1112,6 +1115,14 @@ except ImportError:
     def _t5_rtime():
         return _t5_pytime.time()
 
+try:
+    from rpython.rlib.nonconst import NonConstant as _nonconst
+except ImportError:
+    "NOT_RPYTHON"
+
+    def _nonconst(x):
+        return x
+
 
 class _T5Warmup(object):
     # `on` is deliberately a PLAIN mutable field: the warmup lever is a promoted
@@ -1122,6 +1133,14 @@ class _T5Warmup(object):
         self.deadline = 0.0
         self.tick = 0        # interpreted activation entries (merge-point, bc 0)
         self.last_trace = 0  # tick value at the last tracer consultation
+        # GC clock: interpreted-activation ticks stall once cheap traces cover
+        # the program (fully-compiled execution is invisible to interpreter
+        # code), so the latch is ALSO clocked by minor collections -- the one
+        # heartbeat that never stalls while the program allocates. Advanced
+        # from the GC hook (main_rpython.MyHooks); plain int stores only.
+        self.gc_tick = 0
+        self.last_trace_gc = 0
+        self.purge_pending = 0  # set by the GC-context latch; purge runs lazily
 
 
 _t5warmup = _T5Warmup()
@@ -1143,6 +1162,7 @@ def _t5_end_phase():
     # dont_look_inside: set_param(None, ...) is a jit_marker the codewriter
     # cannot rewrite inside a jit-visible graph (driver is None).
     _t5warmup.on = False   # one-way: fails all warmup guards
+    _t5warmup.purge_pending = 0
     # Discard ALL cheap-phase compiled code (fork set_param): every JitCell
     # forgets its procedure token, so hot loops recount and retrace fresh with
     # full inlining. Bridge recovery alone cannot replace existing loop tokens
@@ -1157,6 +1177,12 @@ def _t5_warmup_check():
     # point (bc 0), which stays live on trampoline-routed residual calls --
     # the portal graph starts AT the merge point, so a prologue-side counter
     # would freeze once callers compile. Checks amortized to every 256th call.
+    if _t5warmup.purge_pending:
+        # The GC-clocked latch fired (in GC-hook context, where set_param is
+        # off-limits); finish the phase end here, on the first interpreted
+        # activation -- which the failing warmup guards guarantee promptly.
+        _t5_end_phase()
+        return
     _t5warmup.tick += 1
     if (_t5warmup.tick & 255) == 0:
         if _t5warmup.on:
@@ -1170,12 +1196,25 @@ def _t5_warmup_check():
 
 
 def _t5_stamp():
-    # Tracing-activity stamp. Also called from t5_configure (main program) so
-    # the attribute annotations are fully established there: the
-    # can_never_inline hook graph is annotated separately after the main
+    # Tracing-activity stamp (both clocks). Also called from t5_configure
+    # (main program) so the attribute annotations are fully established there:
+    # the can_never_inline hook graph is annotated separately after the main
     # graphs are fixed, and a write appearing only in the hook would
     # re-generalize the attribute and abort translation.
     _t5warmup.last_trace = _t5warmup.tick
+    _t5warmup.last_trace_gc = _t5warmup.gc_tick
+
+
+def t5_gc_minor():
+    # GC-clocked latch, called from MyHooks.on_gc_minor in main_rpython. Runs
+    # in GC-hook context: plain int/bool stores only, NO allocation, and no
+    # set_param -- ending the phase here only flips the flags; the failing
+    # warmup guards then force interpreted re-entry, where the purge runs.
+    if _t5cfg.enabled and _t5cfg.quiesce > 0 and _t5warmup.on:
+        _t5warmup.gc_tick += 1
+        if _t5warmup.gc_tick - _t5warmup.last_trace_gc > _t5cfg.quiesce_gc:
+            _t5warmup.on = False
+            _t5warmup.purge_pending = 1
 
 
 def t5_configure():
@@ -1185,11 +1224,21 @@ def t5_configure():
     _t5cfg.promote_inv = int(v) if v else _t5cfg.promote_inv
     v = _os.environ.get("SOM_T5_QUIESCE")
     _t5cfg.quiesce = int(v) if v else _t5cfg.quiesce
+    v = _os.environ.get("SOM_T5_QUIESCE_GC")
+    _t5cfg.quiesce_gc = int(v) if v else _t5cfg.quiesce_gc
     v = _os.environ.get("SOM_T5_WARMUP_MS")
     if v:
         # Explicit wall-clock mode overrides the structural latch.
         _t5cfg.warmup_ms = int(v)
         _t5cfg.quiesce = 0
+    # Establish generic annotations for the fields written from the GC hook
+    # and the tracer hook (both annotated outside the main program); the
+    # GcHooksStats.reset pattern in main_rpython documents the same need.
+    _t5warmup.gc_tick = _nonconst(0)
+    _t5warmup.last_trace_gc = _nonconst(0)
+    _t5warmup.purge_pending = _nonconst(0)
+    _t5warmup.tick = _nonconst(0)
+    _t5warmup.last_trace = _nonconst(0)
     if _t5cfg.enabled and (_t5cfg.quiesce > 0 or _t5cfg.warmup_ms > 0):
         if _t5cfg.warmup_ms > 0:
             _t5warmup.deadline = _t5_rtime() + _t5cfg.warmup_ms / 1000.0

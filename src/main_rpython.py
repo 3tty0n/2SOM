@@ -21,6 +21,7 @@ from som.tier_type import (
     is_tier1_no_ic_no_ho,
 )
 from som.interpreter.bc.tier_shifting import tier_manager
+from som.interpreter.bc.interpreter_tier3 import t5_gc_minor
 from som.vm.universe import main, Exit
 
 try:
@@ -68,6 +69,9 @@ class MyHooks(GcHooks):
     def on_gc_minor(self, duration, total_memory_used, pinned_objects):
         self.stats.minors += 1
         self.stats.duration_minor += duration
+        # Tier 5 GC-clocked quiescence latch (plain stores only; see
+        # interpreter_tier3.t5_gc_minor).
+        t5_gc_minor()
 
     def on_gc_collect_step(self, duration, oldstate, newstate):
         self.stats.steps += 1
