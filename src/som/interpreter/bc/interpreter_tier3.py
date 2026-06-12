@@ -1155,6 +1155,15 @@ def _t5_warmup_check():
                 _t5warmup.on = False
 
 
+def _t5_stamp():
+    # Tracing-activity stamp. Also called from t5_configure (main program) so
+    # the attribute annotations are fully established there: the
+    # can_never_inline hook graph is annotated separately after the main
+    # graphs are fixed, and a write appearing only in the hook would
+    # re-generalize the attribute and abort translation.
+    _t5warmup.last_trace = _t5warmup.tick
+
+
 def t5_configure():
     v = _os.environ.get("SOM_T5")
     _t5cfg.enabled = int(v) if v else _t5cfg.enabled
@@ -1170,6 +1179,7 @@ def t5_configure():
     if _t5cfg.enabled and (_t5cfg.quiesce > 0 or _t5cfg.warmup_ms > 0):
         if _t5cfg.warmup_ms > 0:
             _t5warmup.deadline = _t5_rtime() + _t5cfg.warmup_ms / 1000.0
+        _t5_stamp()
         _t5warmup.on = True
 
 
@@ -1181,7 +1191,7 @@ def _t5_can_never_inline(current_bc_idx, method):
         return False
     if _t5cfg.quiesce > 0 or _t5cfg.warmup_ms > 0:
         if _t5warmup.on:
-            _t5warmup.last_trace = _t5warmup.tick
+            _t5_stamp()
             return True
         return False
     return method.t5_invocations < _t5cfg.promote_inv
