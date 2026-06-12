@@ -1102,6 +1102,13 @@ class _T5Cfg(object):
         self.quiesce_gc = 32   # SOM_T5_QUIESCE_GC: minor GCs of silence (the
                                # GC clock keeps running where activation ticks
                                # stall under fully-compiled execution)
+        # SOM_T5_PURGE: 1 = plain purge (loops recount from zero); 2 = purge
+        # with reheat (fork API: compiled cells keep near-bound hotness, so
+        # retraces fire on re-entry). 2 removes the post-purge interpreted
+        # gap (DeltaBlue steady 1.17 -> 1.01, Exp17 0.29 -> 0.24) but the
+        # immediate retrace storm hurts deep recursion (Towers 1.11 -> 1.39);
+        # default stays 1 until the phase controller can pick per flip.
+        self.purge = 1
 
 
 _t5cfg = _T5Cfg()
@@ -1155,12 +1162,12 @@ def _t5_end_phase():
     _t5warmup.on = False   # one-way: fails all warmup guards
     _t5warmup.purge_pending = 0
     # Discard ALL cheap-phase compiled code (fork set_param): every JitCell
-    # forgets its procedure token, so hot loops recount and retrace fresh with
-    # full inlining. Bridge recovery alone cannot replace existing loop tokens
+    # forgets its procedure token, so hot loops retrace fresh with full
+    # inlining. Bridge recovery alone cannot replace existing loop tokens
     # in nested call-loop structures (measured: DeltaBlue/Towers stuck at
     # 6-14x); the warmup guards evict running code, the purge makes the
-    # re-entries compile clean.
-    jit.set_param(None, "purge", 1)
+    # re-entries compile clean. See _T5Cfg.purge for the value-2 trade-off.
+    jit.set_param(None, "purge", _t5cfg.purge)
 
 
 def _t5_warmup_check():
@@ -1214,6 +1221,8 @@ def t5_configure():
     _t5cfg.quiesce = int(v) if v else _t5cfg.quiesce
     v = _os.environ.get("SOM_T5_QUIESCE_GC")
     _t5cfg.quiesce_gc = int(v) if v else _t5cfg.quiesce_gc
+    v = _os.environ.get("SOM_T5_PURGE")
+    _t5cfg.purge = int(v) if v else _t5cfg.purge
     # Establish generic annotations for the fields written from the GC hook
     # and the tracer hook (both annotated outside the main program); the
     # GcHooksStats.reset pattern in main_rpython documents the same need.
