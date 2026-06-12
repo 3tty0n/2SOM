@@ -1138,6 +1138,17 @@ def _t5_warmup_mark():
         promote(_t5warmup.on)
 
 
+def _t5_end_phase():
+    _t5warmup.on = False   # one-way: fails all warmup guards
+    # Discard ALL cheap-phase compiled code (fork set_param): every JitCell
+    # forgets its procedure token, so hot loops recount and retrace fresh with
+    # full inlining. Bridge recovery alone cannot replace existing loop tokens
+    # in nested call-loop structures (measured: DeltaBlue/Towers stuck at
+    # 6-14x); the warmup guards evict running code, the purge makes the
+    # re-entries compile clean.
+    jit.set_param(None, "purge", 1)
+
+
 def _t5_warmup_check():
     # Off-trace; called once per INTERPRETED activation entry at the merge
     # point (bc 0), which stays live on trampoline-routed residual calls --
@@ -1150,9 +1161,9 @@ def _t5_warmup_check():
                 # Structural latch: the tracer has been silent for `quiesce`
                 # interpreted activations -> the startup compile storm is over.
                 if _t5warmup.tick - _t5warmup.last_trace > _t5cfg.quiesce:
-                    _t5warmup.on = False   # one-way: fails all warmup guards
+                    _t5_end_phase()
             elif _t5_rtime() >= _t5warmup.deadline:
-                _t5warmup.on = False
+                _t5_end_phase()
 
 
 def _t5_stamp():
