@@ -1082,7 +1082,7 @@ def get_printable_location_tier3(bytecode_index, method):
 # instead of inlining the callee.
 # Default policy: a per-method invocation counter -- residualize a callee until
 # it has been entered promote_inv times, inline after. The alternative global
-# quiescence-latch policy (SOM_T5_QUIESCE > 0) residualizes everything until the
+# quiescence-phase policy (SOM_T5_QUIESCE > 0) residualizes everything until the
 # JIT goes silent, then purges; it wins a few transient-heavy composites but
 # regresses long-running recursion behind an uncompilable driver loop, so it is
 # opt-in. See _T5Cfg.
@@ -1101,15 +1101,15 @@ class _T5Cfg(object):
         # passing promote_inv activations, so it traces fully inlined. No global
         # phase, no purge: nothing a long-running driver loop can lose.
         self.promote_inv = 64  # SOM_T5_PROMOTE_INV: activations before a callee inlines
-        # SOM_T5_QUIESCE > 0 switches to the GLOBAL quiescence-latch policy: the
+        # SOM_T5_QUIESCE > 0 switches to the GLOBAL quiescence-phase policy: the
         # warmup phase residualizes every callee until the JIT goes silent for
-        # this many interpreted activations, then purges. The latch wins on a
+        # this many interpreted activations, then purges. The phase mode wins on a
         # few transient-heavy composites (Mandelbrot, Experiment7/18) but loses
         # badly on a long-running recursive method behind a driver loop the
         # purge cannot recompile (Fibonacci 15x) -- hence default off.
         self.quiesce = 0       # SOM_T5_QUIESCE: activations of silence; 0 = counter mode
-        self.quiesce_gc = 32   # SOM_T5_QUIESCE_GC: minor GCs of silence (latch only)
-        # SOM_T5_PURGE (latch only): 1 = plain purge (loops recount from zero);
+        self.quiesce_gc = 32   # SOM_T5_QUIESCE_GC: minor GCs of silence (phase mode only)
+        # SOM_T5_PURGE (phase mode only): 1 = plain purge (loops recount from zero);
         # 2 = purge with reheat (fork API: compiled cells keep near-bound
         # hotness so retraces fire on re-entry).
         self.purge = 1
@@ -1137,12 +1137,12 @@ class _T5Warmup(object):
         self.last_trace = 0  # tick value at the last tracer consultation
         # GC clock: interpreted-activation ticks stall once cheap traces cover
         # the program (fully-compiled execution is invisible to interpreter
-        # code), so the latch is ALSO clocked by minor collections -- the one
+        # code), so the phase end is ALSO clocked by minor collections -- the one
         # heartbeat that never stalls while the program allocates. Advanced
         # from the GC hook (main_rpython.MyHooks); plain int stores only.
         self.gc_tick = 0
         self.last_trace_gc = 0
-        self.purge_pending = 0  # set by the GC-context latch; purge runs lazily
+        self.purge_pending = 0  # set by the GC-context phase end; purge runs lazily
 
 
 _t5warmup = _T5Warmup()
@@ -1150,7 +1150,7 @@ _t5warmup = _T5Warmup()
 
 def _t5_warmup_mark():
     # Promote the warmup flag at the invocation chokepoint. DO NOT gate this on
-    # quiesce > 0: the promote is load-bearing for BOTH policies. For the latch
+    # quiesce > 0: the promote is load-bearing for BOTH policies. For the phase mode
     # it is the in-trace warmup guard whose failure evicts cheap code at phase
     # end. For the counter (quiesce == 0) it keeps _interpret_tier3_mode a
     # non-trivial graph so the codewriter preserves the interpret_tier3 ->
@@ -1184,7 +1184,7 @@ def _t5_warmup_check():
     # the portal graph starts AT the merge point, so a prologue-side counter
     # would freeze once callers compile. Checks amortized to every 256th call.
     if _t5warmup.purge_pending:
-        # The GC-clocked latch fired (in GC-hook context, where set_param is
+        # The GC-clocked phase end fired (in GC-hook context, where set_param is
         # off-limits); finish the phase end here, on the first interpreted
         # activation -- which the failing warmup guards guarantee promptly.
         _t5_end_phase()
@@ -1192,7 +1192,7 @@ def _t5_warmup_check():
     _t5warmup.tick += 1
     if (_t5warmup.tick & 255) == 0:
         if _t5warmup.on:
-            # Structural latch: the tracer has been silent for `quiesce`
+            # Structural phase end: the tracer has been silent for `quiesce`
             # interpreted activations -> the startup compile storm is over.
             if _t5warmup.tick - _t5warmup.last_trace > _t5cfg.quiesce:
                 _t5_end_phase()
@@ -1209,7 +1209,7 @@ def _t5_stamp():
 
 
 def t5_gc_minor():
-    # GC-clocked latch, called from MyHooks.on_gc_minor in main_rpython. Runs
+    # GC-clocked phase end, called from MyHooks.on_gc_minor in main_rpython. Runs
     # in GC-hook context: plain int/bool stores only, NO allocation, and no
     # set_param -- ending the phase here only flips the flags; the failing
     # warmup guards then force interpreted re-entry, where the purge runs.
@@ -1247,14 +1247,14 @@ def t5_configure():
 def _t5_can_never_inline(current_bc_idx, method):
     # Consulted by the tracer on every recursive portal-call decision -- which
     # makes it the tracing-activity signal itself: stamping the tick here is
-    # what arms the quiescence latch.
+    # what arms the quiescence phase end.
     if not _t5cfg.enabled:
         return False
     if _t5warmup.on:
         _t5_stamp()
         return True
     if _t5cfg.quiesce > 0:
-        # Latch mode, phase over: inline everything -- post-purge retraces
+        # Phase mode, phase over: inline everything -- post-purge retraces
         # must reach tier-3 shape; the counter would residualize callees
         # whose interpreted-activation count happens to sit below the bar.
         return False
