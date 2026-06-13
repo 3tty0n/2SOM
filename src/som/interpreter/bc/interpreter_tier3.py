@@ -183,7 +183,7 @@ def interpret_tier3(
     if not stack:
         stack_ptr = -1
         stack = [None] * max_stack_size
-        if not we_are_jitted():
+        if is_tier3() and not we_are_jitted():
             method.t5_invocations += 1
 
     while True:
@@ -203,7 +203,7 @@ def interpret_tier3(
         # Tier 5 activation tick, at the merge point so it stays live on
         # trampoline-routed residual calls (their portal entry starts HERE, not
         # at the function prologue). Folds away inside traces (we_are_jitted).
-        if current_bc_idx == 0 and not we_are_jitted():
+        if current_bc_idx == 0 and is_tier3() and not we_are_jitted():
             if _t5cfg.enabled and (_t5warmup.on or _t5warmup.purge_pending):
                 _t5_warmup_check()
 
@@ -1073,17 +1073,19 @@ def get_printable_location_tier3(bytecode_index, method):
     )
 
 
-# Tier 5 (adaptive inlining with a quiescence-gated warmup phase): env-gated
-# (SOM_T5=1), default OFF.
+# Tier 5 (adaptive trace shaping): env-gated (SOM_T5=1), default OFF.
 # The ladder: 1 threaded code, 2 stack inliner, 3 tracing, 4 adaptive execution
 # placement (which graph runs each method), 5 adaptive trace shaping (what each
 # trace inlines). Unlike tiers 1-4, tier 5 is not a translation-time SOM_TIER --
 # it is a runtime mode of the tier-3 binary, decided inside the tracer via the
-# can_never_inline hook.
-# During the warmup phase the tracer residualizes portal calls (CALL_ASSEMBLER)
-# instead of inlining them. The phase ends when the JIT quiesces (no tracing for
-# SOM_T5_QUIESCE activations or SOM_T5_QUIESCE_GC minor GCs); all cheap-phase
-# compiled code is then purged and hot loops retrace with full inlining.
+# can_never_inline hook, which residualizes a portal call (CALL_ASSEMBLER)
+# instead of inlining the callee.
+# Default policy: a per-method invocation counter -- residualize a callee until
+# it has been entered promote_inv times, inline after. The alternative global
+# quiescence-latch policy (SOM_T5_QUIESCE > 0) residualizes everything until the
+# JIT goes silent, then purges; it wins a few transient-heavy composites but
+# regresses long-running recursion behind an uncompilable driver loop, so it is
+# opt-in. See _T5Cfg.
 import os as _os
 
 
@@ -1092,22 +1094,24 @@ class _T5Cfg(object):
 
     def __init__(self):
         self.enabled = 0       # SOM_T5: 1 enables adaptive portal inlining (tier 5)
+        # The DEFAULT policy is the per-method invocation counter: a callee is
+        # residualized while method.t5_invocations < promote_inv and inlined
+        # after. It is a natural warmup filter -- a short-lived method stays
+        # cheap, while a hot loop crosses the ~1039 hotness threshold long after
+        # passing promote_inv activations, so it traces fully inlined. No global
+        # phase, no purge: nothing a long-running driver loop can lose.
         self.promote_inv = 64  # SOM_T5_PROMOTE_INV: activations before a callee inlines
-        # The warmup phase ends when the JIT QUIESCES -- this many interpreted
-        # activations pass with no tracing activity (event counts only, no wall
-        # clock). A composite that keeps warming new code never quiesces and
-        # stays in the cheap phase for its whole run; a throughput program
-        # quiesces right after its hot set compiles and switches to full inlining.
-        self.quiesce = 30000   # SOM_T5_QUIESCE: activations of silence; 0 = off
-        self.quiesce_gc = 32   # SOM_T5_QUIESCE_GC: minor GCs of silence (the
-                               # GC clock keeps running where activation ticks
-                               # stall under fully-compiled execution)
-        # SOM_T5_PURGE: 1 = plain purge (loops recount from zero); 2 = purge
-        # with reheat (fork API: compiled cells keep near-bound hotness, so
-        # retraces fire on re-entry). 2 removes the post-purge interpreted
-        # gap (DeltaBlue steady 1.17 -> 1.01, Exp17 0.29 -> 0.24) but the
-        # immediate retrace storm hurts deep recursion (Towers 1.11 -> 1.39);
-        # default stays 1 until the phase controller can pick per flip.
+        # SOM_T5_QUIESCE > 0 switches to the GLOBAL quiescence-latch policy: the
+        # warmup phase residualizes every callee until the JIT goes silent for
+        # this many interpreted activations, then purges. The latch wins on a
+        # few transient-heavy composites (Mandelbrot, Experiment7/18) but loses
+        # badly on a long-running recursive method behind a driver loop the
+        # purge cannot recompile (Fibonacci 15x) -- hence default off.
+        self.quiesce = 0       # SOM_T5_QUIESCE: activations of silence; 0 = counter mode
+        self.quiesce_gc = 32   # SOM_T5_QUIESCE_GC: minor GCs of silence (latch only)
+        # SOM_T5_PURGE (latch only): 1 = plain purge (loops recount from zero);
+        # 2 = purge with reheat (fork API: compiled cells keep near-bound
+        # hotness so retraces fire on re-entry).
         self.purge = 1
 
 
@@ -1145,12 +1149,16 @@ _t5warmup = _T5Warmup()
 
 
 def _t5_warmup_mark():
-    # In-trace warmup guard at the invocation chokepoint: every trace embeds
-    # guard_value on the warmup flag at its first send (heap-cached afterwards).
-    # Ending the warmup phase fails the guard; the bridge is traced after it,
-    # when _t5_can_never_inline answers False, so hot loops recover full
-    # inlining through ordinary bridge compilation. Disabled, the quasi-
-    # immutable `enabled` read folds False and traces carry nothing.
+    # Promote the warmup flag at the invocation chokepoint. DO NOT gate this on
+    # quiesce > 0: the promote is load-bearing for BOTH policies. For the latch
+    # it is the in-trace warmup guard whose failure evicts cheap code at phase
+    # end. For the counter (quiesce == 0) it keeps _interpret_tier3_mode a
+    # non-trivial graph so the codewriter preserves the interpret_tier3 ->
+    # interpret_tier3 recursive_call that can_never_inline hooks; gating it out
+    # lets the call be restructured and the counter stops residualizing
+    # entirely (measured: Exp17 0.21 -> 0.31, Fibonacci 80ms -> tier3 parity,
+    # i.e. tier 5 silently becomes a no-op). The guard_value on the flag is
+    # heap-cached after the first send, so the steady cost is negligible.
     if _t5cfg.enabled:
         promote(_t5warmup.on)
 
