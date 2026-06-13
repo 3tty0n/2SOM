@@ -71,7 +71,8 @@ class MyHooks(GcHooks):
         self.stats.duration_minor += duration
         # Tier 5 GC-clocked quiescence latch (plain stores only; see
         # interpreter_tier3.t5_gc_minor).
-        t5_gc_minor()
+        if is_tier3():
+            t5_gc_minor()
 
     def on_gc_collect_step(self, duration, oldstate, newstate):
         self.stats.steps += 1

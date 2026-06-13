@@ -46,7 +46,7 @@ from som.interpreter.bc.interpreter_inliner import interpret_inliner
 from som.interpreter.bc.interpreter_lean3 import interpret_lean3
 from som.interpreter.bc.tier_shifting import ContinueInTier2
 from som.interpreter.control_flow import ReturnException
-from som.tier_type import is_tier4, MODE_INLINE, MODE_INLINER
+from som.tier_type import is_tier3, is_tier4, MODE_INLINE, MODE_INLINER
 from som.vmobjects.abstract_object import AbstractObject
 from som.vmobjects.method import AbstractMethod
 
@@ -348,7 +348,8 @@ def _interpret_tier3_mode(method, new_frame, max_stack_size, hybrid):
     # is_tier4() folds False and this is just the old interpret_tier3 call.
     # Tier 5 warmup marker: this is the chokepoint every invocation inlines into its
     # caller's trace, so warmup-phase traces from ALL drivers register for invalidation.
-    _t5_warmup_mark()
+    if is_tier3():
+        _t5_warmup_mark()
     if is_tier4():
         if hybrid == MODE_INLINER:
             return interpret_inliner(method, new_frame, max_stack_size)
