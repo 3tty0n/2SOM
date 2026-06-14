@@ -5,6 +5,11 @@
 *.log
 *.html
 *.pdf
+*.log
+*.opt
+*.tracing
+*.summary
+*.env
 
 som-ast*
 som-bc*
