@@ -58,6 +58,12 @@ from rlib.jit import promote, we_are_jitted
 @jit.unroll_safe
 def interpret_inliner(method, frame, max_stack_size):
     from som.vm.current import current_universe
+    from som.vmobjects.method_bc import BcAbstractMethod
+
+    # Pin the receiver type so the quasi-immutable per-site arrays
+    # (_poly/_mega/adaptive_tier) resolve on BcAbstractMethod instead of
+    # migrating up to AbstractObject (see interpret_tier3).
+    assert isinstance(method, BcAbstractMethod)
 
     current_bc_idx = 0
     stack_ptr = -1

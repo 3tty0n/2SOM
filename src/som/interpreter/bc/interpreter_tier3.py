@@ -176,9 +176,15 @@ def interpret_tier3(
     hybrid=False, dummy=False
 ):
     from som.vm.current import current_universe
+    from som.vmobjects.method_bc import BcAbstractMethod
 
     if dummy:
         return
+
+    # The interpreter only ever runs bytecode methods; pin the type so the
+    # quasi-immutable per-site arrays (_poly/_mega/adaptive_tier) resolve on
+    # BcAbstractMethod instead of migrating up to AbstractObject.
+    assert isinstance(method, BcAbstractMethod)
 
     if not stack:
         stack_ptr = -1
