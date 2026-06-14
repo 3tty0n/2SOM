@@ -17,6 +17,7 @@ from som.tier_type import (
     is_inliner,
     is_tier3,
     is_tier4,
+    is_tier5,
     is_tier1_no_ic,
     is_tier1_no_ic_no_ho,
 )
@@ -180,6 +181,10 @@ def target(driver, _args):
         exe_name += "tier1-no-ic"
     elif is_tier1_no_ic_no_ho():
         exe_name += "tier1-no-ic-no-handler-opt"
+    elif is_tier5():
+        # Checked before is_tier3(): the standalone tier-5 build reports
+        # is_tier3() == True, so this branch must win for the binary name.
+        exe_name += "tier5"
     elif is_tier3():
         exe_name += "tier3"
     elif is_tier4():

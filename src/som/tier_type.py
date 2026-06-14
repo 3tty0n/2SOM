@@ -4,6 +4,11 @@ import sys
 from rlib import jit
 
 _interp_type_str = os.getenv("SOM_TIER", None)
+# Standalone tier-5 build selector. Tier 5 (adaptive trace shaping) is the
+# tracing JIT (tier 3) plus the SOM_T5 hooks; building it as its own binary is
+# requested with SOM_TIER5=1 at translation time. A separate flag (rather than
+# SOM_TIER=5, which is the threaded->tracing hybrid) avoids colliding with it.
+_tier5_build_str = os.getenv("SOM_TIER5", None)
 
 _TC = 1               # threaded code
 _INLINER = 2          # stack-manipulation inliner
@@ -13,9 +18,12 @@ _HYBRID = 5           # threaded-code -> tracing tier shift
 _TC_NO_IC = 6         # tier 1 without inline caching
 _TC_NO_IC_NO_HO = 7   # tier 1 without IC and handler opt
 _UNKNOWN = 8
+_TIER5 = 9            # standalone trace-shaping build (tier 3 + the SOM_T5 hooks)
 
 
 def _get_tier_type():
+    if _tier5_build_str == "1":
+        return _TIER5
     if _interp_type_str == "1":
         return _TC
     if _interp_type_str == "2":
@@ -48,7 +56,15 @@ def is_inliner():
 
 @jit.elidable
 def is_tier3():
-    return _INTERP_TYPE == _BC
+    # The standalone tier-5 build is the tracing JIT, so it must look like tier 3
+    # to the interpreter and JIT (dispatch, the SOM_T5 gates, etc.). is_tier5()
+    # below distinguishes it only where needed (e.g. the binary name).
+    return _INTERP_TYPE == _BC or _INTERP_TYPE == _TIER5
+
+
+@jit.elidable
+def is_tier5():
+    return _INTERP_TYPE == _TIER5
 
 
 @jit.elidable

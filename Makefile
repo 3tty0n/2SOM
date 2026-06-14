@@ -12,7 +12,7 @@ SOM_TIER=1
 
 all: compile
 
-compile: som-bc-interp som-bc-jit-tier1 som-bc-jit-tier2 som-bc-jit-tier3 som-bc-jit-tier4 som-bc-jit-hybrid
+compile: som-bc-interp som-bc-jit-tier1 som-bc-jit-tier2 som-bc-jit-tier3 som-bc-jit-tier4 som-bc-jit-tier5 som-bc-jit-hybrid
 
 som-ast-jit: core-lib/.git
 	SOM_INTERP=AST PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR):$(RTIME_EXT_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
@@ -40,6 +40,13 @@ som-bc-jit-tier3: core-lib/.git
 som-bc-jit-tier4: core-lib/.git
 	SOM_TIER=4 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR):$(RTIME_EXT_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
 
+# Tier 5 (adaptive trace shaping) built as its own standalone binary. It is the
+# tracing JIT (is_tier3() is true) compiled via SOM_TIER5=1, so it can diverge
+# from the plain tier-3 build. Run it plain for tier-3 behaviour, or with
+# SOM_T5=1 to enable trace shaping.
+som-bc-jit-tier5: core-lib/.git
+	SOM_TIER5=1 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR):$(RTIME_EXT_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
+
 som-bc-jit-hybrid: core-lib/.git
 	SOM_TIER=5 SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR):$(RTIME_EXT_DIR) $(RPYTHON) $(RPYTHON_ARGS) --batch -Ojit src/main_rpython.py
 
@@ -53,7 +60,7 @@ som-interp: som-ast-interp som-bc-interp
 
 som-jit: som-ast-jit som-bc-jit
 
-som-bc-jit: som-bc-jit-tier1 som-bc-jit-tier2 som-bc-jit-tier3 som-bc-jit-tier4 som-bc-jit-hybrid
+som-bc-jit: som-bc-jit-tier1 som-bc-jit-tier2 som-bc-jit-tier3 som-bc-jit-tier4 som-bc-jit-tier5 som-bc-jit-hybrid
 
 som-bc-jit-tier1-evaluation: som-bc-jit-tier1-no-ic som-bc-jit-tier1-no-ic-no-handler-opt
 
@@ -66,7 +73,7 @@ test: compile
 
 clean:
 	@-rm som-ast-jit som-ast-interp
-	@-rm som-bc-jit  som-bc-interp som-bc-jit-tier1 som-bc-jit-tier2 som-bc-jit-tier3 som-bc-jit-tier4 som-bc-jit-hybrid
+	@-rm som-bc-jit  som-bc-interp som-bc-jit-tier1 som-bc-jit-tier2 som-bc-jit-tier3 som-bc-jit-tier4 som-bc-jit-tier5 som-bc-jit-hybrid
 	@-rm som-bc-jit-tier1-no-ic som-bc-jit-tier1-no-ic-no-handler-opt som-bc-interp-tier1
 
 core-lib/.git:
