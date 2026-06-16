@@ -3,20 +3,20 @@ from rlib.erased import new_erasing_pair
 from rlib.jit import JitDriver
 from rlib.debug import make_sure_not_resized
 
-from som.tier_type import is_tier1, is_tier3, is_tier4, is_inliner, is_hybrid
+from som.tier_type import is_tier1, is_tier3, is_adaptive, is_inliner, is_hybrid
 
 
 def _put_all_should_jit():
     # Emit the putAll: loop merge point for every tracing tier, not plain threaded
     # code (tier 1). Mirrors _is_tracing_tier() in bc/integer_primitives.py.
-    return is_tier3() or is_tier4() or is_inliner() or is_hybrid()
+    return is_tier3() or is_adaptive() or is_inliner() or is_hybrid()
 
 
 def _put_all_invoke_1(block_method, block):
     if is_tier1():
         return block_method.invoke_1(block)
-    if is_tier4():
-        return block_method.invoke_1_tier4(block)
+    if is_adaptive():
+        return block_method.invoke_1_adaptive(block)
     return block_method.invoke_1_tier3(block, False)
 
 from som.vmobjects.abstract_object import AbstractObject

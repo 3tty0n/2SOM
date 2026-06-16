@@ -23,7 +23,7 @@ from som.tier_type import (
     is_hybrid,
     is_tier1,
     is_tier3,
-    is_tier4,
+    is_adaptive,
     is_inliner,
     is_tier1_no_ic,
     is_tier1_no_ic_no_ho,
@@ -78,21 +78,21 @@ def interpret(method, frame, max_stack_size, dummy=False):
     elif is_tier3():
         result = interpret_tier3(method, frame, max_stack_size)
         return result
-    elif is_tier4():
+    elif is_adaptive():
         # Committed methods bypass the controller so the JIT can inline the activation
         # into a caller's trace -- the hot path for whileTrue:/do: blocks invoked via
         # the generic invoke_1. adaptive_tier is quasi-immutable, so `at` folds in the
         # trace; a trace compiled while warm is invalidated by the promotion write.
         at = method.adaptive_tier
         if at == 3:
-            from som.interpreter.bc.interpreter_lean3 import interpret_lean3
-            return interpret_lean3(method, frame, max_stack_size)
+            from som.interpreter.bc.interpreter_committed import interpret_committed
+            return interpret_committed(method, frame, max_stack_size)
         if at == 4:
             return interpret_tier3(method, frame, max_stack_size, hybrid=True)
         # Undecided (0) and warm (2) go through the controller, which counts warm
         # activations off-trace toward the promotion threshold.
-        from som.interpreter.bc.adaptive import _adaptive_tier4
-        return _adaptive_tier4(method, frame, max_stack_size)
+        from som.interpreter.bc.adaptive import _adaptive_dispatch
+        return _adaptive_dispatch(method, frame, max_stack_size)
     elif is_hybrid():
         current_bc_idx = 0
         while True:

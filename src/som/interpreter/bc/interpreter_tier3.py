@@ -56,9 +56,9 @@ from rlib.jit import (
 )
 
 # Policy constants for make_interp
-P_HYBRID = 0     # interpret_tier3: red `hybrid` mode, mega routes, tier5, adaptive profiling
+P_HYBRID = 0     # interpret_tier3: red `hybrid` mode, mega routes, shaping, adaptive profiling
 P_WARM = 1       # interpret_inliner: residualize every send, early-exit OSR, warm profiling
-P_COMMITTED = 2  # interpret_lean3: inline every send, no merge-point adaptive_tier read
+P_COMMITTED = 2  # interpret_committed: inline every send, no merge-point adaptive_tier read
 
 
 # Send dispatch: inline (tier 3) / residualize-all (tier 2 inliner) / residualize
@@ -183,7 +183,7 @@ def make_interp(policy, gpl_fn, driver_name):
             reds=["stack_ptr", "hybrid", "frame", "stack"],
             get_printable_location=gpl_fn,
             should_unroll_one_iteration=lambda current_bc_idx, method: True,
-            can_never_inline=_t5_can_never_inline,
+            can_never_inline=_shaping_can_never_inline,
         )
     else:
         jitdriver = jit.JitDriver(
@@ -209,7 +209,7 @@ def make_interp(policy, gpl_fn, driver_name):
             stack_ptr = -1
             stack = [None] * max_stack_size
             if policy == P_HYBRID and is_tier3() and not we_are_jitted():
-                method.t5_invocations += 1
+                method.shaping_invocations += 1
 
         while True:
             if policy == P_HYBRID:
@@ -223,8 +223,8 @@ def make_interp(policy, gpl_fn, driver_name):
                 )
                 hybrid = promote(hybrid)
                 if current_bc_idx == 0 and is_tier3() and not we_are_jitted():
-                    if _t5cfg.enabled and (_t5warmup.on or _t5warmup.purge_pending):
-                        _t5_warmup_check()
+                    if _shaping_cfg.enabled and (_shaping_warmup.on or _shaping_warmup.purge_pending):
+                        _shaping_warmup_check()
                 if hybrid == MODE_INLINER:
                     at = method.adaptive_tier
                     if at == 3:
@@ -242,7 +242,7 @@ def make_interp(policy, gpl_fn, driver_name):
                 if policy == P_WARM:
                     at = method.adaptive_tier
                     if at == 3:
-                        return interpret_lean3(
+                        return interpret_committed(
                             method, frame, len(stack), current_bc_idx, stack, stack_ptr
                         )
                     if at == 4:
@@ -1179,7 +1179,7 @@ def get_printable_location_tier3(bytecode_index, method):
     )
 
 
-# Tier 5 (adaptive trace shaping): env-gated (SOM_T5=1), default OFF.
+# Tier 5 (adaptive trace shaping): env-gated (SOM_SHAPING=1), default OFF.
 # The ladder: 1 threaded code, 2 stack inliner, 3 tracing, 4 adaptive execution
 # placement (which graph runs each method), 5 adaptive trace shaping (what each
 # trace inlines). Unlike tiers 1-4, tier 5 is not a translation-time SOM_TIER --
@@ -1188,40 +1188,40 @@ def get_printable_location_tier3(bytecode_index, method):
 # instead of inlining the callee.
 # Default policy: a per-method invocation counter -- residualize a callee until
 # it has been entered promote_inv times, inline after. The alternative global
-# quiescence-phase policy (SOM_T5_QUIESCE > 0) residualizes everything until the
+# quiescence-phase policy (SOM_SHAPING_QUIESCE > 0) residualizes everything until the
 # JIT goes silent, then purges; it wins a few transient-heavy composites but
 # regresses long-running recursion behind an uncompilable driver loop, so it is
-# opt-in. See _T5Cfg.
+# opt-in. See _ShapingCfg.
 import os as _os
 
 
-class _T5Cfg(object):
+class _ShapingCfg(object):
     _immutable_fields_ = ["enabled?", "quiesce?"]
 
     def __init__(self):
-        self.enabled = 0       # SOM_T5: 1 enables adaptive portal inlining (tier 5)
+        self.enabled = 0       # SOM_SHAPING: 1 enables adaptive portal inlining (tier 5)
         # The DEFAULT policy is the per-method invocation counter: a callee is
-        # residualized while method.t5_invocations < promote_inv and inlined
+        # residualized while method.shaping_invocations < promote_inv and inlined
         # after. It is a natural warmup filter -- a short-lived method stays
         # cheap, while a hot loop crosses the ~1039 hotness threshold long after
         # passing promote_inv activations, so it traces fully inlined. No global
         # phase, no purge: nothing a long-running driver loop can lose.
-        self.promote_inv = 64  # SOM_T5_PROMOTE_INV: activations before a callee inlines
-        # SOM_T5_QUIESCE > 0 switches to the GLOBAL quiescence-phase policy: the
+        self.promote_inv = 64  # SOM_SHAPING_PROMOTE_INV: activations before a callee inlines
+        # SOM_SHAPING_QUIESCE > 0 switches to the GLOBAL quiescence-phase policy: the
         # warmup phase residualizes every callee until the JIT goes silent for
         # this many interpreted activations, then purges. The phase mode wins on a
         # few transient-heavy composites (Mandelbrot, Experiment7/18) but loses
         # badly on a long-running recursive method behind a driver loop the
         # purge cannot recompile (Fibonacci 15x) -- hence default off.
-        self.quiesce = 0       # SOM_T5_QUIESCE: activations of silence; 0 = counter mode
-        self.quiesce_gc = 32   # SOM_T5_QUIESCE_GC: minor GCs of silence (phase mode only)
-        # SOM_T5_PURGE (phase mode only): 1 = plain purge (loops recount from zero);
+        self.quiesce = 0       # SOM_SHAPING_QUIESCE: activations of silence; 0 = counter mode
+        self.quiesce_gc = 32   # SOM_SHAPING_QUIESCE_GC: minor GCs of silence (phase mode only)
+        # SOM_SHAPING_PURGE (phase mode only): 1 = plain purge (loops recount from zero);
         # 2 = purge with reheat (fork API: compiled cells keep near-bound
         # hotness so retraces fire on re-entry).
         self.purge = 1
 
 
-_t5cfg = _T5Cfg()
+_shaping_cfg = _ShapingCfg()
 
 
 try:
@@ -1233,7 +1233,7 @@ except ImportError:
         return x
 
 
-class _T5Warmup(object):
+class _ShapingWarmup(object):
     # `on` is deliberately a PLAIN mutable field: the warmup lever is a promoted
     # in-trace guard, not quasi-immutable invalidation (an empty marker call
     # gets dead-code-eliminated and the folded read never registers traces).
@@ -1251,10 +1251,10 @@ class _T5Warmup(object):
         self.purge_pending = 0  # set by the GC-context phase end; purge runs lazily
 
 
-_t5warmup = _T5Warmup()
+_shaping_warmup = _ShapingWarmup()
 
 
-def _t5_warmup_mark():
+def _shaping_warmup_mark():
     # Promote the warmup flag at the invocation chokepoint. DO NOT gate this on
     # quiesce > 0: the promote is load-bearing for BOTH policies. For the phase mode
     # it is the in-trace warmup guard whose failure evicts cheap code at phase
@@ -1265,106 +1265,106 @@ def _t5_warmup_mark():
     # entirely (measured: Exp17 0.21 -> 0.31, Fibonacci 80ms -> tier3 parity,
     # i.e. tier 5 silently becomes a no-op). The guard_value on the flag is
     # heap-cached after the first send, so the steady cost is negligible.
-    if _t5cfg.enabled:
-        promote(_t5warmup.on)
+    if _shaping_cfg.enabled:
+        promote(_shaping_warmup.on)
 
 
 @jit.dont_look_inside
-def _t5_end_phase():
+def _shaping_end_phase():
     # dont_look_inside: set_param(None, ...) is a jit_marker the codewriter
     # cannot rewrite inside a jit-visible graph (driver is None).
-    _t5warmup.on = False   # one-way: fails all warmup guards
-    _t5warmup.purge_pending = 0
+    _shaping_warmup.on = False   # one-way: fails all warmup guards
+    _shaping_warmup.purge_pending = 0
     # Discard ALL cheap-phase compiled code (fork set_param): every JitCell
     # forgets its procedure token, so hot loops retrace fresh with full
     # inlining. Bridge recovery alone cannot replace existing loop tokens
     # in nested call-loop structures (measured: DeltaBlue/Towers stuck at
     # 6-14x); the warmup guards evict running code, the purge makes the
-    # re-entries compile clean. See _T5Cfg.purge for the value-2 trade-off.
-    jit.set_param(None, "purge", _t5cfg.purge)
+    # re-entries compile clean. See _ShapingCfg.purge for the value-2 trade-off.
+    jit.set_param(None, "purge", _shaping_cfg.purge)
 
 
-def _t5_warmup_check():
+def _shaping_warmup_check():
     # Off-trace; called once per INTERPRETED activation entry at the merge
     # point (bc 0), which stays live on trampoline-routed residual calls --
     # the portal graph starts AT the merge point, so a prologue-side counter
     # would freeze once callers compile. Checks amortized to every 256th call.
-    if _t5warmup.purge_pending:
+    if _shaping_warmup.purge_pending:
         # The GC-clocked phase end fired (in GC-hook context, where set_param is
         # off-limits); finish the phase end here, on the first interpreted
         # activation -- which the failing warmup guards guarantee promptly.
-        _t5_end_phase()
+        _shaping_end_phase()
         return
-    _t5warmup.tick += 1
-    if (_t5warmup.tick & 255) == 0:
-        if _t5warmup.on:
+    _shaping_warmup.tick += 1
+    if (_shaping_warmup.tick & 255) == 0:
+        if _shaping_warmup.on:
             # Structural phase end: the tracer has been silent for `quiesce`
             # interpreted activations -> the startup compile storm is over.
-            if _t5warmup.tick - _t5warmup.last_trace > _t5cfg.quiesce:
-                _t5_end_phase()
+            if _shaping_warmup.tick - _shaping_warmup.last_trace > _shaping_cfg.quiesce:
+                _shaping_end_phase()
 
 
-def _t5_stamp():
-    # Tracing-activity stamp (both clocks). Also called from t5_configure
+def _shaping_stamp():
+    # Tracing-activity stamp (both clocks). Also called from shaping_configure
     # (main program) so the attribute annotations are fully established there:
     # the can_never_inline hook graph is annotated separately after the main
     # graphs are fixed, and a write appearing only in the hook would
     # re-generalize the attribute and abort translation.
-    _t5warmup.last_trace = _t5warmup.tick
-    _t5warmup.last_trace_gc = _t5warmup.gc_tick
+    _shaping_warmup.last_trace = _shaping_warmup.tick
+    _shaping_warmup.last_trace_gc = _shaping_warmup.gc_tick
 
 
-def t5_gc_minor():
+def shaping_gc_minor():
     # GC-clocked phase end, called from MyHooks.on_gc_minor in main_rpython. Runs
     # in GC-hook context: plain int/bool stores only, NO allocation, and no
     # set_param -- ending the phase here only flips the flags; the failing
     # warmup guards then force interpreted re-entry, where the purge runs.
-    if _t5cfg.enabled and _t5cfg.quiesce > 0 and _t5warmup.on:
-        _t5warmup.gc_tick += 1
-        if _t5warmup.gc_tick - _t5warmup.last_trace_gc > _t5cfg.quiesce_gc:
-            _t5warmup.on = False
-            _t5warmup.purge_pending = 1
+    if _shaping_cfg.enabled and _shaping_cfg.quiesce > 0 and _shaping_warmup.on:
+        _shaping_warmup.gc_tick += 1
+        if _shaping_warmup.gc_tick - _shaping_warmup.last_trace_gc > _shaping_cfg.quiesce_gc:
+            _shaping_warmup.on = False
+            _shaping_warmup.purge_pending = 1
 
 
-def t5_configure():
-    v = _os.environ.get("SOM_T5")
-    _t5cfg.enabled = int(v) if v else _t5cfg.enabled
-    v = _os.environ.get("SOM_T5_PROMOTE_INV")
-    _t5cfg.promote_inv = int(v) if v else _t5cfg.promote_inv
-    v = _os.environ.get("SOM_T5_QUIESCE")
-    _t5cfg.quiesce = int(v) if v else _t5cfg.quiesce
-    v = _os.environ.get("SOM_T5_QUIESCE_GC")
-    _t5cfg.quiesce_gc = int(v) if v else _t5cfg.quiesce_gc
-    v = _os.environ.get("SOM_T5_PURGE")
-    _t5cfg.purge = int(v) if v else _t5cfg.purge
+def shaping_configure():
+    v = _os.environ.get("SOM_SHAPING")
+    _shaping_cfg.enabled = int(v) if v else _shaping_cfg.enabled
+    v = _os.environ.get("SOM_SHAPING_PROMOTE_INV")
+    _shaping_cfg.promote_inv = int(v) if v else _shaping_cfg.promote_inv
+    v = _os.environ.get("SOM_SHAPING_QUIESCE")
+    _shaping_cfg.quiesce = int(v) if v else _shaping_cfg.quiesce
+    v = _os.environ.get("SOM_SHAPING_QUIESCE_GC")
+    _shaping_cfg.quiesce_gc = int(v) if v else _shaping_cfg.quiesce_gc
+    v = _os.environ.get("SOM_SHAPING_PURGE")
+    _shaping_cfg.purge = int(v) if v else _shaping_cfg.purge
     # Establish generic annotations for the fields written from the GC hook
     # and the tracer hook (both annotated outside the main program); the
     # GcHooksStats.reset pattern in main_rpython documents the same need.
-    _t5warmup.gc_tick = _nonconst(0)
-    _t5warmup.last_trace_gc = _nonconst(0)
-    _t5warmup.purge_pending = _nonconst(0)
-    _t5warmup.tick = _nonconst(0)
-    _t5warmup.last_trace = _nonconst(0)
-    if _t5cfg.enabled and _t5cfg.quiesce > 0:
-        _t5_stamp()
-        _t5warmup.on = True
+    _shaping_warmup.gc_tick = _nonconst(0)
+    _shaping_warmup.last_trace_gc = _nonconst(0)
+    _shaping_warmup.purge_pending = _nonconst(0)
+    _shaping_warmup.tick = _nonconst(0)
+    _shaping_warmup.last_trace = _nonconst(0)
+    if _shaping_cfg.enabled and _shaping_cfg.quiesce > 0:
+        _shaping_stamp()
+        _shaping_warmup.on = True
 
 
-def _t5_can_never_inline(current_bc_idx, method):
+def _shaping_can_never_inline(current_bc_idx, method):
     # Consulted by the tracer on every recursive portal-call decision -- which
     # makes it the tracing-activity signal itself: stamping the tick here is
     # what arms the quiescence phase end.
-    if not _t5cfg.enabled:
+    if not _shaping_cfg.enabled:
         return False
-    if _t5warmup.on:
-        _t5_stamp()
+    if _shaping_warmup.on:
+        _shaping_stamp()
         return True
-    if _t5cfg.quiesce > 0:
+    if _shaping_cfg.quiesce > 0:
         # Phase mode, phase over: inline everything -- post-purge retraces
         # must reach tier-3 shape; the counter would residualize callees
         # whose interpreted-activation count happens to sit below the bar.
         return False
-    return method.t5_invocations < _t5cfg.promote_inv
+    return method.shaping_invocations < _shaping_cfg.promote_inv
 
 
 def get_printable_location_inliner(bytecode_index, method):
@@ -1374,7 +1374,7 @@ def get_printable_location_inliner(bytecode_index, method):
     return "warm: %s @ %d in %s" % (bytecode_as_str(bc), bytecode_index, method.merge_point_string())
 
 
-def get_printable_location_lean3(bytecode_index, method):
+def get_printable_location_committed(bytecode_index, method):
     from som.vmobjects.method_bc import BcAbstractMethod
     assert isinstance(method, BcAbstractMethod)
     bc = method.get_bytecode(bytecode_index)
@@ -1382,7 +1382,7 @@ def get_printable_location_lean3(bytecode_index, method):
 
 
 interpret_tier3, jitdriver = make_interp(P_HYBRID, get_printable_location_tier3, "Interpreter")
-interpret_lean3, lean3_jitdriver = make_interp(P_COMMITTED, get_printable_location_lean3, "Tier3")
+interpret_committed, committed_jitdriver = make_interp(P_COMMITTED, get_printable_location_committed, "Committed")
 interpret_inliner, inliner_jitdriver = make_interp(P_WARM, get_printable_location_inliner, "Inliner")
 
 
@@ -1398,8 +1398,8 @@ def _env_int(name, default):
 
 
 def inliner_configure():
-    threshold = _env_int("SOM_T4_WARM_THRESHOLD", 131)
-    eagerness = _env_int("SOM_T4_WARM_EAGERNESS", 32)
+    threshold = _env_int("SOM_ADAPTIVE_WARM_THRESHOLD", 131)
+    eagerness = _env_int("SOM_ADAPTIVE_WARM_EAGERNESS", 32)
     jit.set_param(inliner_jitdriver, "threshold", threshold)
     jit.set_param(inliner_jitdriver, "function_threshold", threshold * 2)
     jit.set_param(inliner_jitdriver, "trace_eagerness", eagerness)

@@ -6,7 +6,7 @@ from som.interpreter.bc.interpreter_tier3 import (  # noqa: F401
     inliner_jitdriver,
     inliner_configure,
     get_printable_location_inliner,
-    interpret_lean3,
-    lean3_jitdriver,
-    get_printable_location_lean3,
+    interpret_committed,
+    committed_jitdriver,
+    get_printable_location_committed,
 )

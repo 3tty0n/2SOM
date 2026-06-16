@@ -41,12 +41,12 @@ from som.interpreter.bc.frame import (
     create_frame_4
 )
 from som.interpreter.bc.interpreter import interpret
-from som.interpreter.bc.interpreter_tier3 import interpret_tier3, _t5_warmup_mark
+from som.interpreter.bc.interpreter_tier3 import interpret_tier3, _shaping_warmup_mark
 from som.interpreter.bc.interpreter_inliner import interpret_inliner
-from som.interpreter.bc.interpreter_lean3 import interpret_lean3
+from som.interpreter.bc.interpreter_committed import interpret_committed
 from som.interpreter.bc.tier_shifting import ContinueInTier2
 from som.interpreter.control_flow import ReturnException
-from som.tier_type import is_tier3, is_tier4, MODE_INLINE, MODE_INLINER
+from som.tier_type import is_tier3, is_adaptive, MODE_INLINE, MODE_INLINER
 from som.vmobjects.abstract_object import AbstractObject
 from som.vmobjects.method import AbstractMethod
 
@@ -66,13 +66,13 @@ class BcAbstractMethod(AbstractMethod):
         "_size_inner",
         "_inlined_loops[*]",
         # Quasi-immutable per-site residualization decision; whole-array replace via
-        # adaptive._t4_set_poly so the JIT-folded _poly[site] never goes stale.
+        # adaptive._adaptive_set_poly so the JIT-folded _poly[site] never goes stale.
         "_poly?[*]",
         # Quasi-immutable per-site megamorphic-dispatch decision (0 normal, 1
         # residualise). Whole-array replace via adaptive._set_mega.
         "_mega?[*]",
         # Quasi-immutable committed tier (0 undecided, 3 inline, 4 hybrid), written
-        # once by the controller; lets invoke_*_tier4 fold the post-commit fast path.
+        # once by the controller; lets invoke_*_adaptive fold the post-commit fast path.
         "adaptive_tier?",
     ]
 
@@ -116,7 +116,7 @@ class BcAbstractMethod(AbstractMethod):
         self._redecided = [0] * num_bytecodes
         # Cached site classification (0 unclassified, 1 not-profiled, 2 arith, 3 pred).
         self._site_kind = [0] * num_bytecodes
-        # Quasi-immutable residualization decision, via adaptive._t4_set_poly.
+        # Quasi-immutable residualization decision, via adaptive._adaptive_set_poly.
         self._poly = [0] * num_bytecodes
         # Megamorphic-dispatch decision (quasi-immutable, via adaptive._set_mega): a
         # site residualises once its distinct receiver-class count crosses mega_floor.
@@ -145,12 +145,12 @@ class BcAbstractMethod(AbstractMethod):
         self.cold_invocations = 0
         self.cold_ops = 0
         # Tier 5 (adaptive inlining with a warmup phase): activations seen by this method.
-        self.t5_invocations = 0
-        self.ab_round = 0               # A/B round counter (even=tier3, odd=tier4)
+        self.shaping_invocations = 0
+        self.ab_round = 0               # A/B round counter (even=tier3, odd=adaptive)
         self.t3_min = 0.0               # best-of-min timing for tier 3 (inline)
-        self.t4_min = 0.0               # best-of-min timing for tier 4 (hybrid)
+        self.adaptive_min = 0.0               # best-of-min timing for tier 4 (hybrid)
         self.t3_n = 0                   # number of timed tier-3 samples collected
-        self.t4_n = 0                   # number of timed tier-4 samples collected
+        self.adaptive_n = 0                   # number of timed tier-4 samples collected
         # ---------------------------------------------------------------------
 
         self._literals = literals
@@ -345,12 +345,12 @@ def _interpret_tier3_mode(method, new_frame, max_stack_size, hybrid):
     # the lean inliner interpreter, committed tier 3 -> the lean tier-3 interpreter
     # (adaptive_tier is quasi-immutable, so the read folds in traces); hybrid and
     # uncommitted/profiling activations run the shared interpreter. Elsewhere
-    # is_tier4() folds False and this is just the old interpret_tier3 call.
+    # is_adaptive() folds False and this is just the old interpret_tier3 call.
     # Tier 5 warmup marker: this is the chokepoint every invocation inlines into its
     # caller's trace, so warmup-phase traces from ALL drivers register for invalidation.
     if is_tier3():
-        _t5_warmup_mark()
-    if is_tier4():
+        _shaping_warmup_mark()
+    if is_adaptive():
         if hybrid == MODE_INLINER:
             return interpret_inliner(method, new_frame, max_stack_size)
         if hybrid == MODE_INLINE:
@@ -372,7 +372,7 @@ def _interpret_tier3_mode(method, new_frame, max_stack_size, hybrid):
                 # without this they trace forever in the bloated shared graph
                 # (DeltaBlue's hottest loops, e.g. Planner>>makePlan:, compiled
                 # there). Profiling activations use _run_profiling instead.
-                return interpret_lean3(method, new_frame, max_stack_size)
+                return interpret_committed(method, new_frame, max_stack_size)
     return interpret_tier3(method, new_frame, max_stack_size, hybrid=hybrid)
 
 
@@ -392,14 +392,14 @@ def _interp_with_nlr_tier3(method, new_frame, max_stack_size, hybrid=False):
 
 def _adaptive_with_nlr(method, new_frame, max_stack_size):
     # Non-local-return wrapper around the adaptive controller, for the DIRECT
-    # invoke_*_tier4 entry of block methods (loop drivers). The dispatcher path
-    # (interpret() -> _adaptive_tier4) is already wrapped by _interp_with_nlr, so
+    # invoke_*_adaptive entry of block methods (loop drivers). The dispatcher path
+    # (interpret() -> _adaptive_dispatch) is already wrapped by _interp_with_nlr, so
     # the controller itself must NOT wrap (see BcMethod._run_tier3).
-    from som.interpreter.bc.adaptive import _adaptive_tier4
+    from som.interpreter.bc.adaptive import _adaptive_dispatch
     inner = get_inner_as_context(new_frame)
 
     try:
-        result = _adaptive_tier4(method, new_frame, max_stack_size)
+        result = _adaptive_dispatch(method, new_frame, max_stack_size)
         mark_as_no_longer_on_stack(inner)
         return result
     except ReturnException as e:
@@ -420,15 +420,15 @@ class BcMethod(BcAbstractMethod):
             self, new_frame, self._maximum_number_of_stack_elements, hybrid
         )
 
-    def invoke_1_tier4(self, rcvr, ctx=None):
+    def invoke_1_adaptive(self, rcvr, ctx=None):
         at = self.adaptive_tier
         if at == 3 or at == 4:
             # Committed: skip the controller so the JIT can inline the activation into
             # a loop-driver trace. Warm (2) and undecided (0) go through the controller.
             return self.invoke_1_tier3(rcvr, at == 4)
-        from som.interpreter.bc.adaptive import _adaptive_tier4
+        from som.interpreter.bc.adaptive import _adaptive_dispatch
         new_frame = create_frame_1(rcvr, self._size_frame, self._size_inner)
-        return _adaptive_tier4(self, new_frame, self._maximum_number_of_stack_elements)
+        return _adaptive_dispatch(self, new_frame, self._maximum_number_of_stack_elements)
 
     def invoke_2(self, rcvr, arg1, ctx=None):
         new_frame = create_frame_2(
@@ -452,11 +452,11 @@ class BcMethod(BcAbstractMethod):
             self, new_frame, self._maximum_number_of_stack_elements, hybrid
         )
 
-    def invoke_2_tier4(self, rcvr, arg1, ctx=None):
+    def invoke_2_adaptive(self, rcvr, arg1, ctx=None):
         at = self.adaptive_tier
         if at == 3 or at == 4:
             return self.invoke_2_tier3(rcvr, arg1, at == 4)
-        from som.interpreter.bc.adaptive import _adaptive_tier4
+        from som.interpreter.bc.adaptive import _adaptive_dispatch
         new_frame = create_frame_2(
             rcvr,
             arg1,
@@ -464,7 +464,7 @@ class BcMethod(BcAbstractMethod):
             self._size_frame,
             self._size_inner,
         )
-        return _adaptive_tier4(self, new_frame, self._maximum_number_of_stack_elements)
+        return _adaptive_dispatch(self, new_frame, self._maximum_number_of_stack_elements)
 
     def invoke_3(self, rcvr, arg1, arg2, ctx=None):
         new_frame = create_frame_3(
@@ -490,11 +490,11 @@ class BcMethod(BcAbstractMethod):
             self, new_frame, self._maximum_number_of_stack_elements, hybrid
         )
 
-    def invoke_3_tier4(self, rcvr, arg1, arg2, ctx=None):
+    def invoke_3_adaptive(self, rcvr, arg1, arg2, ctx=None):
         at = self.adaptive_tier
         if at == 3 or at == 4:
             return self.invoke_3_tier3(rcvr, arg1, arg2, at == 4)
-        from som.interpreter.bc.adaptive import _adaptive_tier4
+        from som.interpreter.bc.adaptive import _adaptive_dispatch
         new_frame = create_frame_3(
             self._arg_inner_access,
             self._size_frame,
@@ -503,7 +503,7 @@ class BcMethod(BcAbstractMethod):
             arg1,
             arg2,
         )
-        return _adaptive_tier4(self, new_frame, self._maximum_number_of_stack_elements)
+        return _adaptive_dispatch(self, new_frame, self._maximum_number_of_stack_elements)
 
     def invoke_4(self, rcvr, arg1, arg2, arg3, ctx=None):
         new_frame = create_frame_4(
@@ -531,11 +531,11 @@ class BcMethod(BcAbstractMethod):
             self, new_frame, self._maximum_number_of_stack_elements, hybrid
         )
 
-    def invoke_4_tier4(self, rcvr, arg1, arg2, arg3, ctx=None):
+    def invoke_4_adaptive(self, rcvr, arg1, arg2, arg3, ctx=None):
         at = self.adaptive_tier
         if at == 3 or at == 4:
             return self.invoke_4_tier3(rcvr, arg1, arg2, arg3, at == 4)
-        from som.interpreter.bc.adaptive import _adaptive_tier4
+        from som.interpreter.bc.adaptive import _adaptive_dispatch
         new_frame = create_frame_4(
             self._arg_inner_access,
             self._size_frame,
@@ -545,7 +545,7 @@ class BcMethod(BcAbstractMethod):
             arg2,
             arg3
         )
-        return _adaptive_tier4(self, new_frame, self._maximum_number_of_stack_elements)
+        return _adaptive_dispatch(self, new_frame, self._maximum_number_of_stack_elements)
 
     def invoke_n(self, stack, stack_ptr, ctx=None):
         new_frame = create_frame(
@@ -577,11 +577,11 @@ class BcMethod(BcAbstractMethod):
             stack, stack_ptr, self._number_of_arguments, result
         )
 
-    def invoke_n_tier4(self, stack, stack_ptr, ctx=None):
+    def invoke_n_adaptive(self, stack, stack_ptr, ctx=None):
         at = self.adaptive_tier
         if at == 3 or at == 4:
             return self.invoke_n_tier3(stack, stack_ptr, at == 4)
-        from som.interpreter.bc.adaptive import _adaptive_tier4
+        from som.interpreter.bc.adaptive import _adaptive_dispatch
         new_frame = create_frame(
             self._arg_inner_access,
             self._size_frame,
@@ -590,7 +590,7 @@ class BcMethod(BcAbstractMethod):
             stack_ptr,
             self._number_of_arguments,
         )
-        result = _adaptive_tier4(
+        result = _adaptive_dispatch(
             self, new_frame, self._maximum_number_of_stack_elements
         )
         return stack_pop_old_arguments_and_push_result(
@@ -617,7 +617,7 @@ class BcMethod(BcAbstractMethod):
             return interpret_tier1(self, frame, max_stack_size)
         except ContinueInTier2 as e:
             stack = e.stack
-            return interpret_lean3(
+            return interpret_committed(
                 e.method,
                 e.frame,
                 max_stack_size,
@@ -1018,7 +1018,7 @@ class BcMethodNLR(BcMethod):
             self, new_frame, self._maximum_number_of_stack_elements, hybrid
         )
 
-    def invoke_1_tier4(self, rcvr, ctx=None):
+    def invoke_1_adaptive(self, rcvr, ctx=None):
         at = self.adaptive_tier
         if at == 3 or at == 4:
             return self.invoke_1_tier3(rcvr, at == 4)
@@ -1047,7 +1047,7 @@ class BcMethodNLR(BcMethod):
             self, new_frame, self._maximum_number_of_stack_elements, hybrid
         )
 
-    def invoke_2_tier4(self, rcvr, arg1, ctx=None):
+    def invoke_2_adaptive(self, rcvr, arg1, ctx=None):
         at = self.adaptive_tier
         if at == 3 or at == 4:
             return self.invoke_2_tier3(rcvr, arg1, at == 4)
@@ -1084,7 +1084,7 @@ class BcMethodNLR(BcMethod):
             self, new_frame, self._maximum_number_of_stack_elements, hybrid
         )
 
-    def invoke_3_tier4(self, rcvr, arg1, arg2, ctx=None):
+    def invoke_3_adaptive(self, rcvr, arg1, arg2, ctx=None):
         at = self.adaptive_tier
         if at == 3 or at == 4:
             return self.invoke_3_tier3(rcvr, arg1, arg2, at == 4)
@@ -1152,7 +1152,7 @@ class BcMethodNLR(BcMethod):
                 )
             raise e
 
-    def invoke_n_tier4(self, stack, stack_ptr, ctx=None):
+    def invoke_n_adaptive(self, stack, stack_ptr, ctx=None):
         at = self.adaptive_tier
         if at == 3 or at == 4:
             return self.invoke_n_tier3(stack, stack_ptr, at == 4)

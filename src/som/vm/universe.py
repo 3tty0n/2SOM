@@ -537,13 +537,13 @@ def main(args):
     if True: # not is_tier1():
         jit.set_param(None, "trace_limit", 15000)
     # Read the adaptive tier-4 knobs (SOM_ADAPTIVE_MODEL, SOM_CB_*) once at startup.
-    from som.interpreter.bc.adaptive import _t4_configure
-    _t4_configure()
-    from som.tier_type import is_tier3, is_tier4
+    from som.interpreter.bc.adaptive import _adaptive_configure
+    _adaptive_configure()
+    from som.tier_type import is_tier3, is_adaptive
     if is_tier3():
-        from som.interpreter.bc.interpreter_tier3 import t5_configure
-        t5_configure()
-    if is_tier4():
+        from som.interpreter.bc.interpreter_tier3 import shaping_configure
+        shaping_configure()
+    if is_adaptive():
         # Warm-phase driver compiles earlier than tier 3 (cheap traces).
         from som.interpreter.bc.interpreter_inliner import inliner_configure
         inliner_configure()

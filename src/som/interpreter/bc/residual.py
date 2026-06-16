@@ -13,7 +13,7 @@ keeping compiled code invariant to the type mix. Two mechanisms:
 """
 from rlib import jit
 
-from som.tier_type import is_tier4, MODE_INLINE, MODE_HYBRID, MODE_INLINER
+from som.tier_type import is_adaptive, MODE_INLINE, MODE_HYBRID, MODE_INLINER
 from som.vm.globals import trueObject, falseObject
 from som.vmobjects.double import Double
 from som.vmobjects.integer import Integer
@@ -189,7 +189,7 @@ def _callee_mode(invokable):
 
 @jit.dont_look_inside
 def _residual_send_1(method, invokable, rcvr):
-    if is_tier4():
+    if is_adaptive():
         _warm_op(method)
         return invokable.invoke_1_tier3(rcvr, _callee_mode(invokable))
     return invokable.invoke_1_tier3(rcvr, MODE_INLINE)
@@ -197,7 +197,7 @@ def _residual_send_1(method, invokable, rcvr):
 
 @jit.dont_look_inside
 def _residual_send_2(method, invokable, rcvr, arg):
-    if is_tier4():
+    if is_adaptive():
         _warm_op(method)
         return invokable.invoke_2_tier3(rcvr, arg, _callee_mode(invokable))
     return invokable.invoke_2_tier3(rcvr, arg, MODE_INLINE)
@@ -205,7 +205,7 @@ def _residual_send_2(method, invokable, rcvr, arg):
 
 @jit.dont_look_inside
 def _residual_send_3(method, invokable, rcvr, arg1, arg2):
-    if is_tier4():
+    if is_adaptive():
         _warm_op(method)
         return invokable.invoke_3_tier3(rcvr, arg1, arg2, _callee_mode(invokable))
     return invokable.invoke_3_tier3(rcvr, arg1, arg2, MODE_INLINE)
@@ -213,7 +213,7 @@ def _residual_send_3(method, invokable, rcvr, arg1, arg2):
 
 @jit.dont_look_inside
 def _residual_send_4(method, invokable, rcvr, arg1, arg2, arg3):
-    if is_tier4():
+    if is_adaptive():
         _warm_op(method)
         return invokable.invoke_4_tier3(rcvr, arg1, arg2, arg3, _callee_mode(invokable))
     return invokable.invoke_4_tier3(rcvr, arg1, arg2, arg3, MODE_INLINE)
@@ -221,7 +221,7 @@ def _residual_send_4(method, invokable, rcvr, arg1, arg2, arg3):
 
 @jit.dont_look_inside
 def _residual_send_n(method, invokable, stack, stack_ptr):
-    if is_tier4():
+    if is_adaptive():
         _warm_op(method)
         return invokable.invoke_n_tier3(stack, stack_ptr, _callee_mode(invokable))
     return invokable.invoke_n_tier3(stack, stack_ptr, MODE_INLINE)

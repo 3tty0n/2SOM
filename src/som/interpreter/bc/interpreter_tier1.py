@@ -24,7 +24,7 @@ from som.interpreter.bc.hints import (
 from som.interpreter.bc.tier_shifting import ContinueInTier1, ContinueInTier2, tier_manager
 from som.interpreter.control_flow import ReturnException
 from som.interpreter.send import lookup_and_send_2, lookup_and_send_3, lookup_and_send_2_tier3, lookup_and_send_3_tier3
-from som.tier_type import is_hybrid, is_tier1, is_tier3, is_tier4
+from som.tier_type import is_hybrid, is_tier1, is_tier3, is_adaptive
 from som.vm.globals import nilObject, trueObject, falseObject
 from som.vmobjects.array import Array
 from som.vmobjects.block_bc import BcBlock
@@ -1014,7 +1014,7 @@ def interpret_tier1(
                 # In the tier-4 binary the IC fast path is folded out: a chain
                 # pinning a call_assembler into a callee's tier-1 trace would go
                 # stale once that callee promotes to its committed tier.
-                if is_tier4() or rcvr_type is None:
+                if is_adaptive() or rcvr_type is None:
                     next_bc_idx = _send_1(
                         current_bc_idx,
                         next_bc_idx,
@@ -1080,7 +1080,7 @@ def interpret_tier1(
         elif bytecode == Bytecodes.send_2:
             if we_are_jitted():
                 rcvr_type = method.get_receiver_type(current_bc_idx)
-                if is_tier4() or rcvr_type is None:
+                if is_adaptive() or rcvr_type is None:
                     next_bc_idx = _send_2(
                         current_bc_idx,
                         next_bc_idx,
@@ -1127,7 +1127,7 @@ def interpret_tier1(
         elif bytecode == Bytecodes.send_3:
             if we_are_jitted():
                 rcvr_type = method.get_receiver_type(current_bc_idx)
-                if is_tier4() or rcvr_type is None:
+                if is_adaptive() or rcvr_type is None:
                     next_bc_idx = _send_3(
                         current_bc_idx,
                         next_bc_idx,
@@ -1174,7 +1174,7 @@ def interpret_tier1(
         elif bytecode == Bytecodes.send_4:
             if we_are_jitted():
                 rcvr_type = method.get_receiver_type(current_bc_idx)
-                if is_tier4() or rcvr_type is None:
+                if is_adaptive() or rcvr_type is None:
                     next_bc_idx = _send_4(
                         current_bc_idx,
                         next_bc_idx,
@@ -1403,7 +1403,7 @@ def interpret_tier1(
         elif bytecode == Bytecodes.jump_backward:
             target_bc_idx = current_bc_idx - method.get_bytecode(current_bc_idx + 1)
 
-            if is_tier4():
+            if is_adaptive():
                 # COLD escape: past the back-edge budget this activation finishes
                 # in the lean tier-3 graph (caught in BcMethod._run_tier1).
                 from som.interpreter.bc.adaptive import cold_backedge
@@ -1566,7 +1566,7 @@ def interpret_tier1(
                 + (method.get_bytecode(current_bc_idx + 2) << 8)
             )
 
-            if is_tier4():
+            if is_adaptive():
                 # COLD escape (see jump_backward).
                 from som.interpreter.bc.adaptive import cold_backedge
 

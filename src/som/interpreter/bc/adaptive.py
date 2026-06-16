@@ -38,9 +38,9 @@ except ImportError:
 # --- runtime-mutable configuration (instance fields, env-overridable) -----------
 # RPython constant-folds module globals / list-held constants in surprising ways,
 # so the knobs live on a mutable instance and are read at runtime.
-class _T4Cfg(object):
+class _AdaptiveCfg(object):
     def __init__(self):
-        self.debug = 0            # SOM_T4_DEBUG: trace controller commit decisions
+        self.debug = 0            # SOM_ADAPTIVE_DEBUG: trace controller commit decisions
         self.cbmodel = 1          # master gate: 0 => legacy controller
         # profile-gate threshold: cnt_base + cnt_slope * num_bytecodes
         self.cnt_base = 100
@@ -51,7 +51,7 @@ class _T4Cfg(object):
         self.cnt_maxinv = 4
         self.ab_warm = 1          # A/B: per-tier samples discarded as compile warmup
         self.ab_samples = 2       # A/B: timed samples per tier before committing
-        self.ab_t4_margin = 5     # A/B: tier 4 must win by this percent
+        self.ab_adaptive_margin = 5     # A/B: tier 4 must win by this percent
         self.cmp_switch_floor = 8  # cmp switches/site: interleaved -> tier 4
         # frequency-aware arithmetic residualization knobs
         self.ratio = 1            # residualise when minority * ratio >= total
@@ -73,18 +73,18 @@ class _T4Cfg(object):
         # residualizing traces), then promotes to its final tier (3/4) once hot -- by
         # promote_inv warm activations or promote_ops residual sends. The adaptive_tier
         # write invalidates the warm traces, so running loops deopt to the committed mode.
-        self.warm_enabled = 1     # SOM_T4_WARM: 0 disables the warm phase (legacy decisions)
+        self.warm_enabled = 1     # SOM_ADAPTIVE_WARM: 0 disables the warm phase (legacy decisions)
         # Promotion thresholds (grid on Experiment / micro-startup / DeltaBlue-steady):
         #   ops=2048/inv=16 -> exp 0.893, startup 0.992; ops=8192/inv=64 -> exp 0.827,
         #   startup 1.007; ops=32768/inv=256 -> exp ~0.79 but startup 1.03 / DeltaBlue 1.25.
-        self.promote_inv = 64     # SOM_T4_PROMOTE_INV: warm activations before promotion
-        self.promote_ops = 8192   # SOM_T4_PROMOTE_OPS: warm residual sends before promotion
+        self.promote_inv = 64     # SOM_ADAPTIVE_PROMOTE_INV: warm activations before promotion
+        self.promote_ops = 8192   # SOM_ADAPTIVE_PROMOTE_OPS: warm residual sends before promotion
         # Warm is a STARTUP tier: after warm_era seconds of process runtime every warm
         # entry promotes immediately and new decisions commit directly. Without the
         # deadline, low-traffic warm methods linger and steady-hot traces compiled
         # meanwhile bake in adaptive_tier==2 guards/barrier calls on non-constant
         # paths that never heal (DeltaBlue steady 1.2x at 100 iterations).
-        self.warm_era = 0.4       # SOM_T4_WARM_ERA_MS / 1000.0
+        self.warm_era = 0.4       # SOM_ADAPTIVE_WARM_ERA_MS / 1000.0
         # COLD phase: before profiling even starts, an undecided method runs its
         # first cold_inv activations on the THREADED-CODE interpreter (tier 1).
         # Cold activations do not consume the profile gate. A single-activation
@@ -99,31 +99,31 @@ class _T4Cfg(object):
         # is ~5x slower and segfaults once chains compile). The cheap-compiled
         # warmup niche is already taken by the warm inliner tier. Threaded code
         # pays off as a long-residence STANDALONE tier (SOM_TIER=1), not a phase.
-        self.cold_enabled = 0     # SOM_T4_COLD: 1 enables the experimental cold phase
-        self.cold_inv = 16        # SOM_T4_COLD_INV: cold activations before profiling
-        self.cold_ops = 4096      # SOM_T4_COLD_OPS: cold back-edges before the OSR escape
+        self.cold_enabled = 0     # SOM_ADAPTIVE_COLD: 1 enables the experimental cold phase
+        self.cold_inv = 16        # SOM_ADAPTIVE_COLD_INV: cold activations before profiling
+        self.cold_ops = 4096      # SOM_ADAPTIVE_COLD_OPS: cold back-edges before the OSR escape
         # Straggler drain: a warm method older than this many controller DECISIONS
         # promotes at the next decision pass. Low-traffic methods otherwise stay
         # warm forever (their entries stop before promote_inv), and warm-history
         # exposure perturbs the shape of steady traces (DeltaBlue deep-steady 1.2x
         # at age 48 vs tier3 parity at 8; experiments unaffected). Decision count,
         # not wall clock, so it tracks workload progress.
-        self.warm_drain_age = 8   # SOM_T4_DRAIN_AGE
+        self.warm_drain_age = 8   # SOM_ADAPTIVE_DRAIN_AGE
 
 
-_t4cfg = _T4Cfg()
+_adaptive_cfg = _AdaptiveCfg()
 
 
 # Runtime-mutable controller state on a prebuilt instance (RPython would drop the
 # in-place writes of a module-global counter after translation -- the same reason
-# _T4Cfg is an instance). `profiling` is the window the controller raises around a
+# _AdaptiveCfg is an instance). `profiling` is the window the controller raises around a
 # method's profile-gate activation so the send handlers gather the operand/layout
 # profile while the method runs inline -- never traced hybrid=True, which would leave
 # a stale loop that committed hybrid=False calls fail the top guard on (Fibonacci 3.2x).
-class _T4State(object):
+class _AdaptiveState(object):
     def __init__(self):
         self.profiling = 0   # >0 while a profile-gate activation is running
-        self.start_time = 0.0  # process start (set by _t4_configure); warm-era anchor
+        self.start_time = 0.0  # process start (set by _adaptive_configure); warm-era anchor
         self.decisions = 0   # controller decision passes (drain clock)
         self.warm_list = []  # methods currently committed warm (drain registry)
         self.d_layout = 0    # diag: _profile_layout calls
@@ -132,18 +132,18 @@ class _T4State(object):
         self.d_gatejit = 0   # diag: gate activations seen under we_are_jitted()
 
 
-_t4state = _T4State()
+_adaptive_state = _AdaptiveState()
 
 
 def _profiling_active():
-    return _t4state.profiling > 0
+    return _adaptive_state.profiling > 0
 
 
 def _profiling_active_for(method):
     """True when the profiling window is open and `method` is still uncommitted. The
     window is a global flag, so the per-method guard stops an already-committed method
     from paying profiling instrumentation while some other method is being profiled."""
-    return _t4state.profiling > 0 and method.adaptive_tier == 0
+    return _adaptive_state.profiling > 0 and method.adaptive_tier == 0
 
 
 def _env_int(name, current):
@@ -153,51 +153,51 @@ def _env_int(name, current):
     return current
 
 
-def _t4_configure():
+def _adaptive_configure():
     """Read the SOM_* knobs once at startup. Call from the VM bootstrap."""
-    _t4cfg.cbmodel = _env_int("SOM_ADAPTIVE_MODEL", _t4cfg.cbmodel)
-    _t4cfg.cnt_base = _env_int("SOM_CB_CNT_BASE", _t4cfg.cnt_base)
-    _t4cfg.cnt_slope = _env_int("SOM_CB_CNT_SLOPE", _t4cfg.cnt_slope)
-    _t4cfg.cnt_maxinv = _env_int("SOM_CB_CNT_MAXINV", _t4cfg.cnt_maxinv)
-    _t4cfg.ab_warm = _env_int("SOM_CB_AB_WARM", _t4cfg.ab_warm)
-    _t4cfg.ab_samples = _env_int("SOM_CB_AB_SAMPLES", _t4cfg.ab_samples)
-    _t4cfg.ab_t4_margin = _env_int("SOM_CB_AB_HYBRID_MARGIN", _t4cfg.ab_t4_margin)
-    _t4cfg.cmp_switch_floor = _env_int("SOM_CB_SWITCH_FLOOR", _t4cfg.cmp_switch_floor)
-    _t4cfg.ratio = _env_int("SOM_POLY_RATIO", _t4cfg.ratio)
-    _t4cfg.freeze = _env_int("SOM_FREEZE", _t4cfg.freeze)
-    _t4cfg.minn = _env_int("SOM_PROFILE_MIN", _t4cfg.minn)
-    _t4cfg.bailfloor = _env_int("SOM_BAIL_FLOOR", _t4cfg.bailfloor)
-    _t4cfg.mega_enabled = _env_int("SOM_CB_MEGA", _t4cfg.mega_enabled)
-    _t4cfg.mega_floor = _env_int("SOM_CB_MEGA_FLOOR", _t4cfg.mega_floor)
-    _t4cfg.mega_probe_max = _env_int("SOM_CB_MEGA_PROBE", _t4cfg.mega_probe_max)
-    _t4cfg.warm_enabled = _env_int("SOM_T4_WARM", _t4cfg.warm_enabled)
-    _t4cfg.cold_enabled = _env_int("SOM_T4_COLD", _t4cfg.cold_enabled)
-    _t4cfg.cold_inv = _env_int("SOM_T4_COLD_INV", _t4cfg.cold_inv)
-    _t4cfg.cold_ops = _env_int("SOM_T4_COLD_OPS", _t4cfg.cold_ops)
-    _t4cfg.promote_inv = _env_int("SOM_T4_PROMOTE_INV", _t4cfg.promote_inv)
-    _t4cfg.promote_ops = _env_int("SOM_T4_PROMOTE_OPS", _t4cfg.promote_ops)
-    _t4cfg.warm_era = _env_int("SOM_T4_WARM_ERA_MS", int(_t4cfg.warm_era * 1000)) / 1000.0
-    _t4cfg.warm_drain_age = _env_int("SOM_T4_DRAIN_AGE", _t4cfg.warm_drain_age)
-    _t4cfg.debug = _env_int("SOM_T4_DEBUG", _t4cfg.debug)
-    _t4state.start_time = _rtime()
+    _adaptive_cfg.cbmodel = _env_int("SOM_ADAPTIVE_MODEL", _adaptive_cfg.cbmodel)
+    _adaptive_cfg.cnt_base = _env_int("SOM_CB_CNT_BASE", _adaptive_cfg.cnt_base)
+    _adaptive_cfg.cnt_slope = _env_int("SOM_CB_CNT_SLOPE", _adaptive_cfg.cnt_slope)
+    _adaptive_cfg.cnt_maxinv = _env_int("SOM_CB_CNT_MAXINV", _adaptive_cfg.cnt_maxinv)
+    _adaptive_cfg.ab_warm = _env_int("SOM_CB_AB_WARM", _adaptive_cfg.ab_warm)
+    _adaptive_cfg.ab_samples = _env_int("SOM_CB_AB_SAMPLES", _adaptive_cfg.ab_samples)
+    _adaptive_cfg.ab_adaptive_margin = _env_int("SOM_CB_AB_HYBRID_MARGIN", _adaptive_cfg.ab_adaptive_margin)
+    _adaptive_cfg.cmp_switch_floor = _env_int("SOM_CB_SWITCH_FLOOR", _adaptive_cfg.cmp_switch_floor)
+    _adaptive_cfg.ratio = _env_int("SOM_POLY_RATIO", _adaptive_cfg.ratio)
+    _adaptive_cfg.freeze = _env_int("SOM_FREEZE", _adaptive_cfg.freeze)
+    _adaptive_cfg.minn = _env_int("SOM_PROFILE_MIN", _adaptive_cfg.minn)
+    _adaptive_cfg.bailfloor = _env_int("SOM_BAIL_FLOOR", _adaptive_cfg.bailfloor)
+    _adaptive_cfg.mega_enabled = _env_int("SOM_CB_MEGA", _adaptive_cfg.mega_enabled)
+    _adaptive_cfg.mega_floor = _env_int("SOM_CB_MEGA_FLOOR", _adaptive_cfg.mega_floor)
+    _adaptive_cfg.mega_probe_max = _env_int("SOM_CB_MEGA_PROBE", _adaptive_cfg.mega_probe_max)
+    _adaptive_cfg.warm_enabled = _env_int("SOM_ADAPTIVE_WARM", _adaptive_cfg.warm_enabled)
+    _adaptive_cfg.cold_enabled = _env_int("SOM_ADAPTIVE_COLD", _adaptive_cfg.cold_enabled)
+    _adaptive_cfg.cold_inv = _env_int("SOM_ADAPTIVE_COLD_INV", _adaptive_cfg.cold_inv)
+    _adaptive_cfg.cold_ops = _env_int("SOM_ADAPTIVE_COLD_OPS", _adaptive_cfg.cold_ops)
+    _adaptive_cfg.promote_inv = _env_int("SOM_ADAPTIVE_PROMOTE_INV", _adaptive_cfg.promote_inv)
+    _adaptive_cfg.promote_ops = _env_int("SOM_ADAPTIVE_PROMOTE_OPS", _adaptive_cfg.promote_ops)
+    _adaptive_cfg.warm_era = _env_int("SOM_ADAPTIVE_WARM_ERA_MS", int(_adaptive_cfg.warm_era * 1000)) / 1000.0
+    _adaptive_cfg.warm_drain_age = _env_int("SOM_ADAPTIVE_DRAIN_AGE", _adaptive_cfg.warm_drain_age)
+    _adaptive_cfg.debug = _env_int("SOM_ADAPTIVE_DEBUG", _adaptive_cfg.debug)
+    _adaptive_state.start_time = _rtime()
 
 
 def _warm_era_over():
     # Warm is a startup tier; past the era every warm entry promotes immediately
     # and new decisions commit directly. Called only off-trace on warm/decision
     # paths, so the clock read costs nothing on committed steady state.
-    return _rtime() - _t4state.start_time > _t4cfg.warm_era
+    return _rtime() - _adaptive_state.start_time > _adaptive_cfg.warm_era
 
 
-def _t4_dbg(method, tier, reason):
-    """Env-gated (SOM_T4_DEBUG) controller-decision trace to stderr. Off-trace only."""
-    if _t4cfg.debug:
-        os.write(2, "[t4] commit tier " + str(tier) + " (" + reason + ") "
+def _adaptive_dbg(method, tier, reason):
+    """Env-gated (SOM_ADAPTIVE_DEBUG) controller-decision trace to stderr. Off-trace only."""
+    if _adaptive_cfg.debug:
+        os.write(2, "[adaptive] commit tier " + str(tier) + " (" + reason + ") "
                  + method.merge_point_string() + "\n")
 
 
 # --- quasi-immutable poly update (array-replace-on-change) -----------------------
-def _t4_set_poly(method, site, value):
+def _adaptive_set_poly(method, site, value):
     """Set method._poly[site]; replaces the whole array on change so the JIT
     invalidates the affected hybrid traces (see BcAbstractMethod._immutable_fields_).
     NEVER store into _poly in place."""
@@ -256,9 +256,9 @@ def _profile_layout(method, site, signature, layout):
     -- tier 3's per-class guard/bridge chain is O(N) per call -- so it is marked for opaque
     O(1) residualisation. The total is cached in _mega_miss[site] for the controller's growth
     check. Tracking only post-overflow classes keeps the monomorphic/2-class majority free."""
-    if not _t4cfg.mega_enabled:
+    if not _adaptive_cfg.mega_enabled:
         return
-    _t4state.d_layout += 1
+    _adaptive_state.d_layout += 1
     seen = method._mega_seen
     if seen is None:
         seen = {}
@@ -269,10 +269,10 @@ def _profile_layout(method, site, signature, layout):
         seen[site] = sset
     if layout not in sset:
         sset[layout] = True
-        _t4state.d_overflow += 1
+        _adaptive_state.d_overflow += 1
         n = len(sset) + 2   # + the two distinct classes still held in the inline cache
         method._mega_miss[site] = n
-        if n >= _t4cfg.mega_floor and _all_callees_trivial(method, site, sset, signature):
+        if n >= _adaptive_cfg.mega_floor and _all_callees_trivial(method, site, sset, signature):
             _set_mega(method, site, 1)
 
 
@@ -329,23 +329,23 @@ def _profile(method, site, kind, w_rcvr, w_arg):
         if a != 0 and b != 0:
             # residualise a polymorphic predicate; whether tier 3 or tier 4 actually
             # runs is the controller's A/B choice.
-            _t4_set_poly(method, site, 1)
+            _adaptive_set_poly(method, site, 1)
     else:
         total = a + b
-        if _t4cfg.minn <= total <= _t4cfg.freeze:
+        if _adaptive_cfg.minn <= total <= _adaptive_cfg.freeze:
             minority = a if a < b else b
-            if minority * _t4cfg.ratio >= total:
-                _t4_set_poly(method, site, 1)
+            if minority * _adaptive_cfg.ratio >= total:
+                _adaptive_set_poly(method, site, 1)
             else:
-                _t4_set_poly(method, site, 0)
+                _adaptive_set_poly(method, site, 0)
         # DRR (deopt-rate re-decision): inert at ratio==1 (the shipped default).
         if we_are_blackholing():
             nb = method._bails[site] + 1
             method._bails[site] = nb
             if (method._redecided[site] == 0 and
-                    nb >= _t4cfg.bailfloor and
-                    nb * _t4cfg.ratio >= method._inl_runs[site] + nb):
-                _t4_set_poly(method, site, 1)
+                    nb >= _adaptive_cfg.bailfloor and
+                    nb * _adaptive_cfg.ratio >= method._inl_runs[site] + nb):
+                _adaptive_set_poly(method, site, 1)
                 method._redecided[site] = 1
 
 
@@ -400,7 +400,7 @@ def _cb_cmp_switch_decision(method):
                 if s > best:
                     best = s
         i += 1
-    if _t4cfg.cmp_switch_floor > 0 and best >= _t4cfg.cmp_switch_floor:
+    if _adaptive_cfg.cmp_switch_floor > 0 and best >= _adaptive_cfg.cmp_switch_floor:
         return 4
     return 0
 
@@ -409,10 +409,10 @@ def _cb_ab_pick(method):
     # Decide once both tiers have enough timed samples: faster best-of-min wins,
     # ties -> tier 3 (no per-op hybrid tax). Tier 4 must clear a small margin.
     # Returns 0 (undecided) until both tiers have ab_samples timed runs.
-    if method.t3_n < _t4cfg.ab_samples or method.t4_n < _t4cfg.ab_samples:
+    if method.t3_n < _adaptive_cfg.ab_samples or method.adaptive_n < _adaptive_cfg.ab_samples:
         return 0
-    t4_limit = method.t3_min * (100.0 - _t4cfg.ab_t4_margin)
-    if method.t4_min * 100.0 < t4_limit:
+    adaptive_limit = method.t3_min * (100.0 - _adaptive_cfg.ab_adaptive_margin)
+    if method.adaptive_min * 100.0 < adaptive_limit:
         return 4
     return 3
 
@@ -425,17 +425,17 @@ def _promote_warm(method, reason):
     interleaved predicate polymorphism -> tier 4 (hybrid), else tier 3 (inline).
     Writing adaptive_tier (quasi-immutable) invalidates every compiled warm trace,
     so running warm loops deopt and continue at the committed mode."""
-    if _t4cfg.mega_enabled and _has_mega_site(method):
+    if _adaptive_cfg.mega_enabled and _has_mega_site(method):
         method.adaptive_tier = 4
         method._mega_seen = None
-        _t4_dbg(method, 4, "warm-mega-" + reason)
+        _adaptive_dbg(method, 4, "warm-mega-" + reason)
         return
     if _has_mixed_cmp_profile(method) and _cb_cmp_switch_decision(method) == 4:
         method.adaptive_tier = 4
-        _t4_dbg(method, 4, "warm-cmp-" + reason)
+        _adaptive_dbg(method, 4, "warm-cmp-" + reason)
         return
     method.adaptive_tier = 3
-    _t4_dbg(method, 3, "warm-" + reason)
+    _adaptive_dbg(method, 3, "warm-" + reason)
 
 
 def _tick_decision():
@@ -444,25 +444,25 @@ def _tick_decision():
     decisions. Their own entries stop before promote_inv, so without the drain
     they stay warm forever and steady-hot traces keep inlined-warm copies of
     them. Runs off-trace in the controller; the registry stays small."""
-    _t4state.decisions += 1
-    if len(_t4state.warm_list) == 0:
+    _adaptive_state.decisions += 1
+    if len(_adaptive_state.warm_list) == 0:
         return
     kept = []
-    for m in _t4state.warm_list:
+    for m in _adaptive_state.warm_list:
         if m.adaptive_tier != 2:
             continue  # promoted by count/era meanwhile
-        if _t4state.decisions - m.warm_epoch > _t4cfg.warm_drain_age:
+        if _adaptive_state.decisions - m.warm_epoch > _adaptive_cfg.warm_drain_age:
             _promote_warm(m, "drain")
         else:
             kept.append(m)
-    _t4state.warm_list = kept
+    _adaptive_state.warm_list = kept
 
 
 def _enter_warm(method):
     """Commit `method` to the warm tier and register it for the straggler drain."""
     method.adaptive_tier = 2
-    method.warm_epoch = _t4state.decisions
-    _t4state.warm_list.append(method)
+    method.warm_epoch = _adaptive_state.decisions
+    _adaptive_state.warm_list.append(method)
 
 
 @jit.dont_look_inside
@@ -473,7 +473,7 @@ def warm_callee_invocation(method):
     the counter never pollutes a trace. Shares warm_invocations/promote_inv."""
     n = method.warm_invocations + 1
     method.warm_invocations = n
-    if n >= _t4cfg.promote_inv or _warm_era_over():
+    if n >= _adaptive_cfg.promote_inv or _warm_era_over():
         _promote_warm(method, "inv")
 
 
@@ -485,7 +485,7 @@ def warm_residual_op(method):
         return
     n = method.warm_ops + 1
     method.warm_ops = n
-    if n >= _t4cfg.promote_ops:
+    if n >= _adaptive_cfg.promote_ops:
         _promote_warm(method, "ops")
 
 
@@ -500,15 +500,15 @@ def cold_backedge(method):
     (@dont_look_inside), so chains exit by the same guard."""
     n = method.cold_ops + 1
     method.cold_ops = n
-    return n >= _t4cfg.cold_ops
+    return n >= _adaptive_cfg.cold_ops
 
 
-# The controller (port of tla.py:_adaptive_tier4). @dont_look_inside: it runs once
+# The controller (port of tla.py:_adaptive_dispatch). @dont_look_inside: it runs once
 # per outer activation, off any trace, so time() and the A/B logic never pollute one.
 @jit.dont_look_inside
-def _adaptive_tier4(method, frame, max_stack_size):
-    if not _t4cfg.cbmodel:
-        return _adaptive_tier4_legacy(method, frame, max_stack_size)
+def _adaptive_dispatch(method, frame, max_stack_size):
+    if not _adaptive_cfg.cbmodel:
+        return _adaptive_dispatch_legacy(method, frame, max_stack_size)
 
     method.adaptive_invocations += 1
 
@@ -522,7 +522,7 @@ def _adaptive_tier4(method, frame, max_stack_size):
         # (warm_residual_op promotes single-activation hot loops independently).
         # Past the warm era, promote immediately (warm is a startup tier).
         method.warm_invocations += 1
-        if method.warm_invocations >= _t4cfg.promote_inv or _warm_era_over():
+        if method.warm_invocations >= _adaptive_cfg.promote_inv or _warm_era_over():
             _promote_warm(method, "inv")
             at = method.adaptive_tier
             return method._run_tier3(
@@ -536,9 +536,9 @@ def _adaptive_tier4(method, frame, max_stack_size):
     #    profiling window stays full-length afterwards. Era-bounded like warm; a
     #    method that spent its back-edge budget escaped mid-loop and skips cold
     #    for good (its loops are hot -- get them to profiling/commit).
-    if (_t4cfg.cold_enabled and not _warm_era_over()
-            and method.cold_invocations < _t4cfg.cold_inv
-            and method.cold_ops < _t4cfg.cold_ops):
+    if (_adaptive_cfg.cold_enabled and not _warm_era_over()
+            and method.cold_invocations < _adaptive_cfg.cold_inv
+            and method.cold_ops < _adaptive_cfg.cold_ops):
         method.cold_invocations += 1
         method.adaptive_invocations -= 1
         return method._run_tier1(frame, max_stack_size)
@@ -547,92 +547,92 @@ def _adaptive_tier4(method, frame, max_stack_size):
     #    handlers gather the operand-type mix. A site whose distinct receiver-class count
     #    is still climbing (and below mega_floor) extends the window up to mega_probe_max
     #    so a deeply megamorphic site is fully observed; low-poly sites plateau and stop.
-    thr = _t4cfg.cnt_base + _t4cfg.cnt_slope * method.get_number_of_bytecodes()
+    thr = _adaptive_cfg.cnt_base + _adaptive_cfg.cnt_slope * method.get_number_of_bytecodes()
     keep_profiling = (_cb_observed_ops(method) < thr and
-                      method.adaptive_invocations < _t4cfg.cnt_maxinv)
+                      method.adaptive_invocations < _adaptive_cfg.cnt_maxinv)
     max_d = _mega_max_distinct(method)
-    if (not keep_profiling and _t4cfg.mega_enabled and
-            method.adaptive_invocations < _t4cfg.mega_probe_max and
-            max_d < _t4cfg.mega_floor and max_d > method._mega_prev_distinct):
+    if (not keep_profiling and _adaptive_cfg.mega_enabled and
+            method.adaptive_invocations < _adaptive_cfg.mega_probe_max and
+            max_d < _adaptive_cfg.mega_floor and max_d > method._mega_prev_distinct):
         keep_profiling = True
     if keep_profiling:
         method._mega_prev_distinct = max_d
-        _t4state.d_gate += 1
+        _adaptive_state.d_gate += 1
         if jit.we_are_jitted():
-            _t4state.d_gatejit += 1
-        _t4state.profiling += 1
+            _adaptive_state.d_gatejit += 1
+        _adaptive_state.profiling += 1
         try:
             # _run_profiling forces the SHARED interpreter (profiling hooks live
             # there); plain MODE_INLINE now routes to the lean tier-3 graph.
             return method._run_profiling(frame, max_stack_size)
         finally:
-            _t4state.profiling -= 1
+            _adaptive_state.profiling -= 1
 
-    if _t4cfg.debug:
-        os.write(2, "[t4dbg] decide " + method.merge_point_string()
+    if _adaptive_cfg.debug:
+        os.write(2, "[adaptive-dbg] decide " + method.merge_point_string()
                  + " obs=" + str(_cb_observed_ops(method))
                  + " inv=" + str(method.adaptive_invocations)
-                 + " maxinv=" + str(_t4cfg.cnt_maxinv)
+                 + " maxinv=" + str(_adaptive_cfg.cnt_maxinv)
                  + " thr=" + str(thr)
                  + " hasMega=" + str(_has_mega_site(method))
-                 + " layoutCalls=" + str(_t4state.d_layout)
-                 + " overflows=" + str(_t4state.d_overflow) + " gate=" + str(_t4state.d_gate) + " gateJitted=" + str(_t4state.d_gatejit) + "\n")
+                 + " layoutCalls=" + str(_adaptive_state.d_layout)
+                 + " overflows=" + str(_adaptive_state.d_overflow) + " gate=" + str(_adaptive_state.d_gate) + " gateJitted=" + str(_adaptive_state.d_gatejit) + "\n")
 
     _tick_decision()
 
     # 1b) deeply-megamorphic site (>= mega_floor distinct classes) -> commit tier 4 so the
     #     site is residualised opaquely (O(1) dispatch vs tier 3's per-class bridge chain).
-    if _t4cfg.mega_enabled and _has_mega_site(method):
+    if _adaptive_cfg.mega_enabled and _has_mega_site(method):
         method.adaptive_tier = 4
         method._mega_seen = None   # profiling done; free the per-site layout sets
-        _t4_dbg(method, 4, "mega")
+        _adaptive_dbg(method, 4, "mega")
         return method._run_tier3(frame, max_stack_size, MODE_HYBRID)
 
     # 2) monomorphic -> nothing to residualise. With the warm phase on, commit tier 2
     #    first and let _promote_warm re-decide 3-vs-4 once hot; off, commit tier 3 directly.
     if not _has_mixed_operand_profile(method):
-        if _t4cfg.warm_enabled and not _warm_era_over():
+        if _adaptive_cfg.warm_enabled and not _warm_era_over():
             _enter_warm(method)
-            _t4_dbg(method, 2, "warm-mono-operand")
+            _adaptive_dbg(method, 2, "warm-mono-operand")
             return method._run_tier3(frame, max_stack_size, MODE_INLINER)
         method.adaptive_tier = 3
-        _t4_dbg(method, 3, "mono-operand")
+        _adaptive_dbg(method, 3, "mono-operand")
         return method._run_tier3(frame, max_stack_size, MODE_INLINE)
     if not _has_mixed_cmp_profile(method):
-        if _t4cfg.warm_enabled and not _warm_era_over():
+        if _adaptive_cfg.warm_enabled and not _warm_era_over():
             _enter_warm(method)
-            _t4_dbg(method, 2, "warm-mono-cmp")
+            _adaptive_dbg(method, 2, "warm-mono-cmp")
             return method._run_tier3(frame, max_stack_size, MODE_INLINER)
         method.adaptive_tier = 3
-        _t4_dbg(method, 3, "mono-cmp")
+        _adaptive_dbg(method, 3, "mono-cmp")
         return method._run_tier3(frame, max_stack_size, MODE_INLINE)
 
     # 3) interleaved predicate polymorphism -> tier 4 immediately
     if _cb_cmp_switch_decision(method) == 4:
         method.adaptive_tier = 4
-        _t4_dbg(method, 4, "cmp-switch")
+        _adaptive_dbg(method, 4, "cmp-switch")
         return method._run_tier3(frame, max_stack_size, MODE_HYBRID)
 
     # 4) otherwise A/B-time tier 3 (even rounds) vs tier 4 (odd rounds) and commit
     #    the faster. The first ab_warm samples of each tier are discarded.
     rnd = method.ab_round
     method.ab_round = rnd + 1
-    use_t4 = (rnd & 1) == 1
+    use_adaptive = (rnd & 1) == 1
     t0 = _rtime()
     res = method._run_tier3(
-        frame, max_stack_size, MODE_HYBRID if use_t4 else MODE_INLINE
+        frame, max_stack_size, MODE_HYBRID if use_adaptive else MODE_INLINE
     )
     dt = _rtime() - t0
     # a hybrid probe can expose interleaving the static profile missed
-    if use_t4 and _cb_cmp_switch_decision(method) == 4:
+    if use_adaptive and _cb_cmp_switch_decision(method) == 4:
         method.adaptive_tier = 4
-        _t4_dbg(method, 4, "ab-cmp-switch")
+        _adaptive_dbg(method, 4, "ab-cmp-switch")
         return res
-    if rnd // 2 >= _t4cfg.ab_warm:
-        if use_t4:
-            if method.t4_n == 0 or dt < method.t4_min:
-                method.t4_min = dt
-            method.t4_n += 1
+    if rnd // 2 >= _adaptive_cfg.ab_warm:
+        if use_adaptive:
+            if method.adaptive_n == 0 or dt < method.adaptive_min:
+                method.adaptive_min = dt
+            method.adaptive_n += 1
         else:
             if method.t3_n == 0 or dt < method.t3_min:
                 method.t3_min = dt
@@ -640,12 +640,12 @@ def _adaptive_tier4(method, frame, max_stack_size):
         pick = _cb_ab_pick(method)
         if pick != 0:
             method.adaptive_tier = pick
-            _t4_dbg(method, pick, "ab-pick")
+            _adaptive_dbg(method, pick, "ab-pick")
     return res
 
 
 @jit.dont_look_inside
-def _adaptive_tier4_legacy(method, frame, max_stack_size):
+def _adaptive_dispatch_legacy(method, frame, max_stack_size):
     """Legacy controller (SOM_ADAPTIVE_MODEL=0): profile a few invocations, then
     commit tier 4 if any mixed operand profile exists, else tier 3."""
     method.adaptive_invocations += 1
