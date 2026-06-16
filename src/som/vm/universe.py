@@ -541,7 +541,7 @@ def main(args):
     _adaptive_configure()
     from som.tier_type import is_tier3, is_adaptive
     if is_tier3():
-        from som.interpreter.bc.interpreter_tier3 import shaping_configure
+        from som.interpreter.bc.shaping import shaping_configure
         shaping_configure()
     if is_adaptive():
         # Warm-phase driver compiles earlier than tier 3 (cheap traces).

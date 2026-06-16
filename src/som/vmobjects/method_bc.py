@@ -41,7 +41,8 @@ from som.interpreter.bc.frame import (
     create_frame_4
 )
 from som.interpreter.bc.interpreter import interpret
-from som.interpreter.bc.interpreter_tier3 import interpret_tier3, _shaping_warmup_mark
+from som.interpreter.bc.interpreter_tier3 import interpret_tier3
+from som.interpreter.bc.shaping import _shaping_warmup_mark
 from som.interpreter.bc.interpreter_inliner import interpret_inliner
 from som.interpreter.bc.interpreter_committed import interpret_committed
 from som.interpreter.bc.tier_shifting import ContinueInTier2

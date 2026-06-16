@@ -22,7 +22,7 @@ from som.tier_type import (
     is_tier1_no_ic_no_ho,
 )
 from som.interpreter.bc.tier_shifting import tier_manager
-from som.interpreter.bc.interpreter_tier3 import shaping_gc_minor
+from som.interpreter.bc.shaping import shaping_gc_minor
 from som.vm.universe import main, Exit
 
 try:
