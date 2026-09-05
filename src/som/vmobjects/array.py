@@ -8,6 +8,8 @@ from som.vm.globals import nilObject, falseObject, trueObject
 from som.vmobjects.double import Double
 from som.vmobjects.integer import Integer
 from som.vmobjects.method import AbstractMethod
+from som.vm.profiler import _PROFILE
+from som.vm import profiler
 
 
 def put_all_obj_pl(block_method):
@@ -803,6 +805,8 @@ class Array(AbstractObject):
         return Array(_obj_strategy, _obj_strategy.new_storage_with_values(values))
 
     def __init__(self, strategy, storage):  # pylint: disable=super-init-not-called
+        if _PROFILE:
+            profiler.on_alloc_array()
         self.strategy = strategy
         self.storage = storage
 

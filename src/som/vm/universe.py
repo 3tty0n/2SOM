@@ -18,6 +18,8 @@ from som.vmobjects.string import String
 from som.vm.globals import nilObject, trueObject, falseObject
 from som.vm.shell import Shell
 from som.vm.static_send import StaticSendBinder
+from som.vm import profiler
+from som.vm.profiler import _PROFILE
 
 _SEND_STATS = os.getenv("SOM_SEND_STATS", "") == "1"
 
@@ -106,6 +108,8 @@ class Universe(object):
         self.__init__(avoid_exit)  # pylint: disable=unnecessary-dunder-call
 
     def exit(self, error_code):
+        if _PROFILE:
+            profiler.report()
         if self._avoid_exit:
             self._last_exit_code = error_code
         else:
@@ -330,6 +334,8 @@ class Universe(object):
 
     @staticmethod
     def new_instance(instance_class):
+        if _PROFILE:
+            profiler.on_alloc_object()
         layout = instance_class.get_layout_for_instances()
         num_fields = layout.get_number_of_fields()
         if num_fields == 0:
@@ -415,6 +421,8 @@ class Universe(object):
         # Add the appropriate value primitive to the block class
         result.add_primitive(block_evaluation_primitive(number_of_arguments), True)
         self.static_sends.class_loaded(self, result)
+        if _PROFILE:
+            profiler.on_class_loaded(result, self)
 
         # Insert the block class into the dictionary of globals
         self.set_global(name, result)
@@ -432,6 +440,8 @@ class Universe(object):
         result = self._load_class(name, None)
         self._load_primitives(result, False)
         self.static_sends.class_loaded(self, result)
+        if _PROFILE:
+            profiler.on_class_loaded(result, self)
         self.set_global(name, result)
         return result
 
@@ -457,6 +467,8 @@ class Universe(object):
 
         self._load_primitives(result, True)
         self.static_sends.class_loaded(self, result)
+        if _PROFILE:
+            profiler.on_class_loaded(result, self)
 
     def _load_class(self, name, system_class):
         # Try loading the class from all different paths

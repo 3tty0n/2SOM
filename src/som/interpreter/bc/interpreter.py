@@ -12,6 +12,7 @@ from som.interpreter.ast.nodes.dispatch import (
     GenericDispatchNode,
 )
 from som.placement import send_place_is_jit
+from som.vm.profiler import _PROFILE, on_send, on_method_executed
 from som.interpreter.bc.bytecodes import (
     LEN_NO_ARGS,
     LEN_ONE_ARG,
@@ -37,7 +38,11 @@ from rlib import jit
 from rlib.jit import promote, elidable_promote, we_are_jitted
 
 
-def _do_super_send(bytecode_index, method, stack, stack_ptr):
+def _profile_send(method, bc_index, receiver, universe):
+    on_send(method, bc_index, receiver.get_class(universe).get_name().get_embedded_string())
+
+
+def _do_super_send(bytecode_index, method, stack, stack_ptr, universe):
     signature = method.get_constant(bytecode_index)
 
     receiver_class = method.get_holder().get_super_class()
@@ -45,6 +50,9 @@ def _do_super_send(bytecode_index, method, stack, stack_ptr):
 
     num_args = invokable.get_number_of_signature_arguments()
     receiver = stack[stack_ptr - (num_args - 1)]
+
+    if _PROFILE:
+        _profile_send(method, bytecode_index, receiver, universe)
 
     if invokable:
         method.set_inline_cache(
@@ -117,6 +125,9 @@ def _invoke_invokable_slow_path(invokable, num_args, receiver, stack, stack_ptr)
 @jit.unroll_safe
 def interpret(method, frame, max_stack_size):
     from som.vm.current import current_universe
+
+    if _PROFILE:
+        on_method_executed(method)
 
     current_bc_idx = 0
 
@@ -393,6 +404,9 @@ def interpret(method, frame, max_stack_size):
         elif bytecode == Bytecodes.send_1:
             receiver = stack[stack_ptr]
 
+            if _PROFILE:
+                _profile_send(method, current_bc_idx, receiver, current_universe)
+
             layout = receiver.get_object_layout(current_universe)
             dispatch_node = _lookup(layout, method, current_bc_idx, current_universe)
 
@@ -406,6 +420,9 @@ def interpret(method, frame, max_stack_size):
 
         elif bytecode == Bytecodes.send_2:
             receiver = stack[stack_ptr - 1]
+
+            if _PROFILE:
+                _profile_send(method, current_bc_idx, receiver, current_universe)
 
             layout = receiver.get_object_layout(current_universe)
             dispatch_node = _lookup(layout, method, current_bc_idx, current_universe)
@@ -425,6 +442,9 @@ def interpret(method, frame, max_stack_size):
 
         elif bytecode == Bytecodes.send_3:
             receiver = stack[stack_ptr - 2]
+
+            if _PROFILE:
+                _profile_send(method, current_bc_idx, receiver, current_universe)
 
             layout = receiver.get_object_layout(current_universe)
             dispatch_node = _lookup(layout, method, current_bc_idx, current_universe)
@@ -450,6 +470,9 @@ def interpret(method, frame, max_stack_size):
                 stack_ptr - (signature.get_number_of_signature_arguments() - 1)
             ]
 
+            if _PROFILE:
+                _profile_send(method, current_bc_idx, receiver, current_universe)
+
             layout = receiver.get_object_layout(current_universe)
             dispatch_node = _lookup(layout, method, current_bc_idx, current_universe)
 
@@ -462,7 +485,9 @@ def interpret(method, frame, max_stack_size):
             current_bc_idx += LEN_ONE_ARG
 
         elif bytecode == Bytecodes.super_send:
-            stack_ptr = _do_super_send(current_bc_idx, method, stack, stack_ptr)
+            stack_ptr = _do_super_send(
+                current_bc_idx, method, stack, stack_ptr, current_universe
+            )
             current_bc_idx += LEN_ONE_ARG
 
         elif bytecode == Bytecodes.return_local:
@@ -755,11 +780,17 @@ def interpret(method, frame, max_stack_size):
 
         elif bytecode == Bytecodes.q_super_send_1:
             dispatch_node = method.get_inline_cache(current_bc_idx)
+            if _PROFILE:
+                _profile_send(method, current_bc_idx, stack[stack_ptr], current_universe)
             stack[stack_ptr] = dispatch_node.dispatch_1(stack[stack_ptr])
             current_bc_idx += LEN_ONE_ARG
 
         elif bytecode == Bytecodes.q_super_send_2:
             dispatch_node = method.get_inline_cache(current_bc_idx)
+            if _PROFILE:
+                _profile_send(
+                    method, current_bc_idx, stack[stack_ptr - 1], current_universe
+                )
             arg = stack[stack_ptr]
             if we_are_jitted():
                 stack[stack_ptr] = None
@@ -769,6 +800,10 @@ def interpret(method, frame, max_stack_size):
 
         elif bytecode == Bytecodes.q_super_send_3:
             dispatch_node = method.get_inline_cache(current_bc_idx)
+            if _PROFILE:
+                _profile_send(
+                    method, current_bc_idx, stack[stack_ptr - 2], current_universe
+                )
             arg2 = stack[stack_ptr]
             arg1 = stack[stack_ptr - 1]
             if we_are_jitted():
@@ -780,6 +815,14 @@ def interpret(method, frame, max_stack_size):
 
         elif bytecode == Bytecodes.q_super_send_n:
             dispatch_node = method.get_inline_cache(current_bc_idx)
+            if _PROFILE:
+                num_args = dispatch_node._cached_method.get_number_of_signature_arguments()
+                _profile_send(
+                    method,
+                    current_bc_idx,
+                    stack[stack_ptr - (num_args - 1)],
+                    current_universe,
+                )
             stack_ptr = dispatch_node.dispatch_n_bc(stack, stack_ptr, None)
             current_bc_idx += LEN_ONE_ARG
 

@@ -1,7 +1,11 @@
+import math
 from math import fmod
 from rlib.float import float_to_str
 from som.vm.globals import trueObject, falseObject
 from som.vmobjects.abstract_object import AbstractObject
+
+
+_INF = 1e200 * 1e200
 
 
 class Double(AbstractObject):
@@ -66,6 +70,13 @@ class Double(AbstractObject):
 
     def prim_double_div(self, right):
         r = self._get_float(right)
+        if r == 0.0:
+            x = self._embedded_double
+            if x == 0.0 or x != x:
+                return Double(_INF - _INF)
+            if (x > 0.0) == (math.copysign(1.0, r) > 0.0):
+                return Double(_INF)
+            return Double(-_INF)
         return Double(self._embedded_double / r)
 
     def prim_int_div(self, right):
