@@ -6,6 +6,7 @@ import sys
 
 from som.compiler.parse_error import ParseError
 from som.interp_type import is_ast_interpreter, is_bytecode_interpreter
+from som.placement import send_place
 from som.vm.universe import main, Exit
 
 try:
@@ -46,6 +47,9 @@ def target(driver, _args):
         exe_name += "jit"
     else:
         exe_name += "interp"
+
+    if send_place() != "interp":
+        exe_name += "-send-" + send_place()
 
     driver.exe_name = exe_name
     return entry_point, None

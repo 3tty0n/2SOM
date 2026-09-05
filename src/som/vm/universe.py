@@ -17,6 +17,9 @@ from som.vmobjects.string import String
 
 from som.vm.globals import nilObject, trueObject, falseObject
 from som.vm.shell import Shell
+from som.vm.static_send import StaticSendBinder
+
+_SEND_STATS = os.getenv("SOM_SEND_STATS", "") == "1"
 
 from som.compiler.sourcecode_compiler import (
     compile_class_from_file,
@@ -66,6 +69,7 @@ class Universe(object):
 
     def __init__(self, avoid_exit=False):
         self._globals = {}
+        self.static_sends = StaticSendBinder()
 
         self.object_class = None
         self.class_class = None
@@ -137,7 +141,10 @@ class Universe(object):
             return shell.start()
         arguments_array = self.new_array_with_strings(arguments)
         initialize = self.system_class.lookup_invokable(symbol_for("initialize:"))
-        return initialize.invoke_2(system_object, arguments_array)
+        result = initialize.invoke_2(system_object, arguments_array)
+        if _SEND_STATS:
+            error_println(self.static_sends.stats())
+        return result
 
     def handle_arguments(self, arguments):
         got_classpath = False
@@ -407,6 +414,7 @@ class Universe(object):
 
         # Add the appropriate value primitive to the block class
         result.add_primitive(block_evaluation_primitive(number_of_arguments), True)
+        self.static_sends.class_loaded(self, result)
 
         # Insert the block class into the dictionary of globals
         self.set_global(name, result)
@@ -423,6 +431,7 @@ class Universe(object):
         # Load the class
         result = self._load_class(name, None)
         self._load_primitives(result, False)
+        self.static_sends.class_loaded(self, result)
         self.set_global(name, result)
         return result
 
@@ -447,6 +456,7 @@ class Universe(object):
             self.exit(200)
 
         self._load_primitives(result, True)
+        self.static_sends.class_loaded(self, result)
 
     def _load_class(self, name, system_class):
         # Try loading the class from all different paths
@@ -504,8 +514,18 @@ def main(args):
     jit.set_param(None, "trace_limit", 15000)
     from som.vm.current import current_universe
 
+    rest = []
+    i = 1
+    while i < len(args):
+        if args[i] == "--jit" and i + 1 < len(args):
+            jit.set_user_param(None, args[i + 1])
+            i += 2
+            continue
+        rest.append(args[i])
+        i += 1
+
     u = current_universe
-    u.interpret(args[1:])
+    u.interpret(rest)
     u.exit(0)
 
 

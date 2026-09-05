@@ -145,8 +145,10 @@ def emit_super_send(mgenc, msg):
     emit2(mgenc, BC.super_send, idx, stack_effect)
 
 
-def emit_send(mgenc, msg):
+def emit_send(mgenc, msg, is_self_send=False):
     idx = mgenc.add_literal_if_absent(msg)
+    if is_self_send:
+        mgenc.add_self_send_site()
     num_args = msg.get_number_of_signature_arguments()
     stack_effect = -num_args + 1  # +1 for the result
 

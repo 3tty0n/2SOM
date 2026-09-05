@@ -11,6 +11,7 @@ from som.interpreter.ast.nodes.dispatch import (
     INLINE_CACHE_SIZE,
     GenericDispatchNode,
 )
+from som.placement import send_place_is_jit
 from som.interpreter.bc.bytecodes import (
     LEN_NO_ARGS,
     LEN_ONE_ARG,
@@ -825,6 +826,12 @@ def get_self(frame, ctx_level):
 
 @elidable_promote("all")
 def _lookup(layout, method, bytecode_index, universe):
+    if send_place_is_jit():
+        generic = method.get_inline_cache(bytecode_index)
+        if generic is None:
+            generic = GenericDispatchNode(method.get_constant(bytecode_index), universe)
+            method.set_inline_cache(bytecode_index, generic)
+        return generic
     cache = first = method.get_inline_cache(bytecode_index)
     while cache is not None:
         if cache.expected_layout is layout:

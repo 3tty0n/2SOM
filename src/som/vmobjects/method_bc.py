@@ -70,8 +70,12 @@ class BcAbstractMethod(AbstractMethod):
         size_inner,
         lexical_scope,
         inlined_loops,
+        self_send_sites=None,
     ):
         AbstractMethod.__init__(self, signature)
+        if self_send_sites is None:
+            self_send_sites = []
+        self._self_send_sites = self_send_sites
 
         # Set the number of bytecodes in this method
         self._bytecodes = ["\x00"] * num_bytecodes
@@ -153,13 +157,19 @@ class BcAbstractMethod(AbstractMethod):
     def set_inline_cache(self, bytecode_index, dispatch_node):
         self._inline_cache[bytecode_index] = dispatch_node
 
+    def get_self_send_sites(self):
+        return self._self_send_sites
+
+    def get_literals(self):
+        return self._literals
+
     def drop_old_inline_cache_entries(self, bytecode_index):
         # Keep in sync with _AbstractGenericMessageNode._get_cache_size_and_drop_old_entries
         prev = None
         cache = self._inline_cache[bytecode_index]
 
         while cache is not None:
-            if not cache.expected_layout.is_latest:
+            if cache.expected_layout is not None and not cache.expected_layout.is_latest:
                 # drop old layout from cache
                 if prev is None:
                     self._inline_cache[bytecode_index] = cache.next_entry
@@ -404,7 +414,7 @@ class BcMethod(BcAbstractMethod):
             ):
                 literal_idx = self.get_bytecode(i + 1)
                 sym = self._literals[literal_idx]
-                emit_send(mgenc, sym)
+                emit_send(mgenc, sym, i in self._self_send_sites)
 
             elif bytecode == Bytecodes.super_send:
                 literal_idx = self.get_bytecode(i + 1)

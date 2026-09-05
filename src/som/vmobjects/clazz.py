@@ -87,7 +87,17 @@ class Class(Object):
         return len(self._invokables_table)
 
     def get_instance_invokables_for_disassembler(self):
+        if self._invokables_table is None:
+            return []
         return self._invokables_table.values()
+
+    def lookup_own_invokable(self, signature):
+        if not self._invokables_table:
+            return None
+        invokable = self._invokables_table.get(signature, None)
+        if invokable is not None and invokable.get_holder() is self:
+            return invokable
+        return None
 
     @jit.elidable_promote("all")
     def lookup_invokable(self, signature):

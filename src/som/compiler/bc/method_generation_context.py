@@ -62,6 +62,7 @@ class MethodGenerationContext(MethodGenerationContextBase):
         self._last_4_bytecodes = [Bytecodes.invalid] * _NUM_LAST_BYTECODES
         self._is_currently_inlining_a_block = False
         self.inlined_loops = []
+        self._self_send_sites = []
 
         self.max_stack_depth = 0
         self._current_stack_depth = 0
@@ -168,6 +169,7 @@ class MethodGenerationContext(MethodGenerationContextBase):
             size_inner,
             self.lexical_scope,
             self.inlined_loops[:],
+            self._self_send_sites[:],
         )
 
         # copy bytecodes into method
@@ -284,6 +286,9 @@ class MethodGenerationContext(MethodGenerationContextBase):
         self._last_4_bytecodes[1] = self._last_4_bytecodes[2]
         self._last_4_bytecodes[2] = self._last_4_bytecodes[3]
         self._last_4_bytecodes[3] = bytecode
+
+    def add_self_send_site(self):
+        self._self_send_sites.append(len(self._bytecode))
 
     def add_bytecode_argument(self, bytecode):
         self._bytecode.append(bytecode)

@@ -154,10 +154,12 @@ class Parser(ParserBase):
             self._messages(mgenc)
 
         self._super_send = False
+        self._self_send = False
 
     def _primary(self, mgenc):
         if self._sym_is_identifier():
             var_name = self._variable()
+            self._self_send = var_name == "self"
             if var_name == "super":
                 self._super_send = True
                 # sends to super push self as the receiver
@@ -166,14 +168,17 @@ class Parser(ParserBase):
 
         elif self._sym == Symbol.NewTerm:
             self._nested_term(mgenc)
+            self._self_send = False
         elif self._sym == Symbol.NewBlock:
             bgenc = MethodGenerationContext(self.universe, mgenc.holder, mgenc)
             self.nested_block(bgenc)
 
             block_method = bgenc.assemble(None)
             emit_push_block(mgenc, block_method, bgenc.requires_context())
+            self._self_send = False
         else:
             self._literal(mgenc)
+            self._self_send = False
 
     def _messages(self, mgenc):
         if self._sym_is_identifier():
@@ -205,13 +210,15 @@ class Parser(ParserBase):
     def _unary_message(self, mgenc):
         is_super_send = self._super_send
         self._super_send = False
+        is_self_send = self._self_send
+        self._self_send = False
 
         msg = self._unary_selector()
 
         if is_super_send:
             emit_super_send(mgenc, msg)
         else:
-            emit_send(mgenc, msg)
+            emit_send(mgenc, msg, is_self_send)
 
     def _try_inc_or_dec_bytecodes(self, msg, is_super_send, mgenc):
         is_inc_or_dec = msg is sym_plus or msg is sym_minus
@@ -228,6 +235,8 @@ class Parser(ParserBase):
     def _binary_message(self, mgenc):
         is_super_send = self._super_send
         self._super_send = False
+        is_self_send = self._self_send
+        self._self_send = False
 
         msg = self._binary_selector()
 
@@ -247,7 +256,7 @@ class Parser(ParserBase):
         if is_super_send:
             emit_super_send(mgenc, msg)
         else:
-            emit_send(mgenc, msg)
+            emit_send(mgenc, msg, is_self_send)
 
     def _binary_operand(self, mgenc):
         self._primary(mgenc)
@@ -258,6 +267,8 @@ class Parser(ParserBase):
     def _keyword_message(self, mgenc):
         is_super_send = self._super_send
         self._super_send = False
+        is_self_send = self._self_send
+        self._self_send = False
 
         keyword_parts = [self._keyword()]
         self._formula(mgenc)
@@ -320,7 +331,7 @@ class Parser(ParserBase):
         if is_super_send:
             emit_super_send(mgenc, msg)
         else:
-            emit_send(mgenc, msg)
+            emit_send(mgenc, msg, is_self_send)
 
     def _formula(self, mgenc):
         self._binary_operand(mgenc)

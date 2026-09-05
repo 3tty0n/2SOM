@@ -67,6 +67,7 @@ class ParserBase(object):
         self._next_sym = Symbol.NONE
         self._get_symbol_from_lexer()
         self._super_send = False
+        self._self_send = False
 
     def _get_source_section(self, coord):
         return SourceSection(

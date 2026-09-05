@@ -15,6 +15,12 @@ som-ast-jit: core-lib/.git
 som-bc-jit:	core-lib/.git
 	SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) --batch -Ojit src/main_rpython.py
 
+som-bc-jit-send-aot: core-lib/.git
+	SOM_SEND_PLACE=aot SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) --batch -Ojit src/main_rpython.py
+
+som-bc-jit-send-jit: core-lib/.git
+	SOM_SEND_PLACE=jit SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) --batch -Ojit src/main_rpython.py
+
 som-ast-interp: core-lib/.git
 	SOM_INTERP=AST PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) --batch src/main_rpython.py
 

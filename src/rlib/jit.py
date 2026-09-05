@@ -5,6 +5,7 @@ try:
     from rpython.rlib.jit import unroll_safe  # pylint: disable=unused-import
     from rpython.rlib.jit import JitDriver  # pylint: disable=unused-import
     from rpython.rlib.jit import set_param  # pylint: disable=unused-import
+    from rpython.rlib.jit import set_user_param  # pylint: disable=unused-import
     from rpython.rlib.jit import dont_look_inside  # pylint: disable=unused-import
     from rpython.rlib.jit import we_are_jitted  # pylint: disable=unused-import
     from rpython.rlib.jit import hint  # pylint: disable=unused-import
@@ -55,6 +56,9 @@ except ImportError:
 
         def can_enter_jit(_self, **_live_vars):  # pylint: disable=no-self-argument
             pass
+
+    def set_user_param(_driver, _text):
+        pass
 
     def set_param(_driver, _name, _value):
         pass
