@@ -99,6 +99,30 @@ class CachedDispatchNode(_AbstractDispatchNode):
         return self._cached_method.invoke_n(stack, stack_ptr)
 
 
+class TrivialFieldReadNode(_AbstractDispatchNode):
+    _immutable_fields_ = ["field_idx"]
+
+    def __init__(self, field_idx):
+        _AbstractDispatchNode.__init__(self, None, None)
+        self.field_idx = field_idx
+
+
+class TrivialFieldWriteNode(_AbstractDispatchNode):
+    _immutable_fields_ = ["field_idx"]
+
+    def __init__(self, field_idx):
+        _AbstractDispatchNode.__init__(self, None, None)
+        self.field_idx = field_idx
+
+
+class TrivialLiteralNode(_AbstractDispatchNode):
+    _immutable_fields_ = ["value"]
+
+    def __init__(self, value):
+        _AbstractDispatchNode.__init__(self, None, None)
+        self.value = value
+
+
 class CachedDnuNode(_AbstractDispatchNode):
     _immutable_fields_ = ["_selector", "_cached_method"]
 

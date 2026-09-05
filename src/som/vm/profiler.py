@@ -2,6 +2,8 @@ import os
 import sys
 import time
 
+from som.interpreter.bc.bytecodes import compute_send_ordinals
+
 _PROFILE = os.getenv("SOM_PROFILE") == "1"
 
 _WINDOW_SIZE = 100000
@@ -64,7 +66,7 @@ def on_send(method, bc_index, rcvr_class_name):
     key = (holder_name, sig_name, bc_index)
     site = _sites.get(key)
     if site is None:
-        site = [0, {}, idx, idx]
+        site = [0, {}, idx, idx, method]
         _sites[key] = site
     site[0] += 1
     if rcvr_class_name not in site[1]:
@@ -106,7 +108,7 @@ def report():
     sites_stable_after_first = 0
     sites_changed_late = 0
     for key, site in _sites.items():
-        count, classes, first_idx, last_new_idx = site
+        count, classes, first_idx, last_new_idx, _method = site
         n_classes = len(classes)
         kind = _site_class(n_classes)
         if kind == "mono":
@@ -149,17 +151,26 @@ def report():
 
     lines.append("# sites")
     lines.append(
-        "holder\tsignature\tbc_index\tcount\tdistinct_classes\tfirst_send_index\tlast_new_class_index"
+        "holder\tsignature\tbc_index\tselector\tordinal\tcount\tdistinct_classes\tfirst_send_index\tlast_new_class_index"
     )
+    ordinal_cache = {}
     for key, site in _sites.items():
         holder_name, sig_name, bc_index = key
-        count, classes, first_idx, last_new_idx = site
+        count, classes, first_idx, last_new_idx, method = site
+        ordinals = ordinal_cache.get(id(method))
+        if ordinals is None:
+            ordinals = compute_send_ordinals(method)
+            ordinal_cache[id(method)] = ordinals
+        selector = method.get_constant(bc_index).get_embedded_string()
+        ordinal = ordinals[bc_index]
         lines.append(
-            "%s\t%s\t%d\t%d\t%d\t%d\t%d"
+            "%s\t%s\t%d\t%s\t%d\t%d\t%d\t%d\t%d"
             % (
                 holder_name,
                 sig_name,
                 bc_index,
+                selector,
+                ordinal,
                 count,
                 len(classes),
                 first_idx,

@@ -101,7 +101,11 @@ class Bytecodes(object):
     q_super_send_3 = q_super_send_2 + 1
     q_super_send_n = q_super_send_3 + 1
 
-    push_local = q_super_send_n + 1
+    q_self_literal = q_super_send_n + 1
+    q_self_field_read = q_self_literal + 1
+    q_self_field_write = q_self_field_read + 1
+
+    push_local = q_self_field_write + 1
     push_argument = push_local + 1
     pop_local = push_argument + 1
     pop_argument = pop_local + 1
@@ -201,6 +205,21 @@ RUN_TIME_ONLY_BYTECODES = [
     Bytecodes.q_super_send_2,
     Bytecodes.q_super_send_3,
     Bytecodes.q_super_send_n,
+    Bytecodes.q_self_literal,
+    Bytecodes.q_self_field_read,
+    Bytecodes.q_self_field_write,
+]
+
+SEND_BYTECODES = [
+    Bytecodes.send_1,
+    Bytecodes.send_2,
+    Bytecodes.send_3,
+    Bytecodes.send_n,
+    Bytecodes.super_send,
+    Bytecodes.q_super_send_1,
+    Bytecodes.q_super_send_2,
+    Bytecodes.q_super_send_3,
+    Bytecodes.q_super_send_n,
 ]
 
 # These Bytecodes imply a context level of 0
@@ -293,6 +312,9 @@ _BYTECODE_LENGTH = [
     LEN_ONE_ARG,  # q_super_send_2
     LEN_ONE_ARG,  # q_super_send_3
     LEN_ONE_ARG,  # q_super_send_n
+    LEN_ONE_ARG,  # q_self_literal
+    LEN_ONE_ARG,  # q_self_field_read
+    LEN_ONE_ARG,  # q_self_field_write
     # rewritten on first use
     LEN_TWO_ARGS,  # push_local
     LEN_TWO_ARGS,  # push_argument
@@ -331,3 +353,19 @@ def _sorted_bytecode_names(cls):
 
 
 _BYTECODE_NAMES = _sorted_bytecode_names(Bytecodes)
+
+
+def compute_send_ordinals(method):
+    ordinals = {}
+    counts = {}
+    idx = 0
+    num_bytecodes = method.get_number_of_bytecodes()
+    while idx < num_bytecodes:
+        bytecode = method.get_bytecode(idx)
+        if is_one_of(bytecode, SEND_BYTECODES):
+            selector = method.get_constant(idx).get_embedded_string()
+            ordinal = counts.get(selector, 0)
+            ordinals[idx] = ordinal
+            counts[selector] = ordinal + 1
+        idx += bytecode_length(bytecode)
+    return ordinals

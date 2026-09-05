@@ -1,6 +1,14 @@
-from som.interpreter.ast.nodes.dispatch import CachedDispatchNode
-from som.interpreter.bc.bytecodes import Bytecodes
-from som.placement import send_place_is_aot
+from som.interpreter.ast.nodes.dispatch import (
+    CachedDispatchNode,
+    GenericDispatchNode,
+    TrivialFieldReadNode,
+    TrivialFieldWriteNode,
+    TrivialLiteralNode,
+)
+from som.interpreter.bc.bytecodes import Bytecodes, compute_send_ordinals
+from som.placement import send_place_is_aot, send_place_is_pgo
+from som.vm import pgo, send_inline
+from som.vmobjects.method_trivial import FieldRead, FieldWrite, LiteralReturn
 
 
 def _q_send_for(bytecode):
@@ -24,6 +32,10 @@ def _plain_send_for(bytecode):
         return Bytecodes.send_3
     if bytecode == Bytecodes.q_super_send_n:
         return Bytecodes.send_n
+    if bytecode == Bytecodes.q_self_literal or bytecode == Bytecodes.q_self_field_read:
+        return Bytecodes.send_1
+    if bytecode == Bytecodes.q_self_field_write:
+        return Bytecodes.send_2
     return Bytecodes.invalid
 
 
@@ -50,15 +62,20 @@ class StaticSendBinder(object):
         self.candidates = 0
         self.bound = 0
         self.unbound = 0
+        self.inlined = 0
+        self.generic_sites = 0
 
     def class_loaded(self, universe, clazz):
-        if not send_place_is_aot() or clazz is None:
+        if clazz is None or not (send_place_is_aot() or send_place_is_pgo()):
             return
         metaclass = clazz.get_class(universe)
         self._invalidate_overridden(clazz)
         self._invalidate_overridden(metaclass)
         self.classes.append(clazz)
         self.classes.append(metaclass)
+        if send_place_is_pgo():
+            self._mark_generic_class(clazz, universe)
+            self._mark_generic_class(metaclass, universe)
         self._bind_class(clazz)
         self._bind_class(metaclass)
 
@@ -114,12 +131,19 @@ class StaticSendBinder(object):
             quick = _q_send_for(bytecode)
             if quick == Bytecodes.invalid:
                 continue
+            if method.get_inline_cache(idx) is not None:
+                continue
             selector = method.get_constant(idx)
             target = clazz.lookup_invokable(selector)
             if target is None or self._overridden_below(clazz, selector):
                 continue
-            method.set_inline_cache(idx, CachedDispatchNode(None, target, None))
-            method.set_bytecode(idx, quick)
+            if send_inline.is_enabled() and self._try_inline_trivial(
+                method, idx, bytecode, target
+            ):
+                self.inlined += 1
+            else:
+                method.set_inline_cache(idx, CachedDispatchNode(None, target, None))
+                method.set_bytecode(idx, quick)
             sites = self.sites.get(selector, None)
             if sites is None:
                 sites = []
@@ -127,6 +151,55 @@ class StaticSendBinder(object):
             sites.append(_Site(method, idx))
             self.bound += 1
 
+    def _try_inline_trivial(self, method, idx, bytecode, target):
+        if isinstance(target, LiteralReturn):
+            if bytecode != Bytecodes.send_1:
+                return False
+            method.set_inline_cache(idx, TrivialLiteralNode(target._value))
+            method.set_bytecode(idx, Bytecodes.q_self_literal)
+            return True
+        if isinstance(target, FieldRead):
+            if bytecode != Bytecodes.send_1 or target._context_level != 0:
+                return False
+            method.set_inline_cache(idx, TrivialFieldReadNode(target._field_idx))
+            method.set_bytecode(idx, Bytecodes.q_self_field_read)
+            return True
+        if isinstance(target, FieldWrite):
+            if bytecode != Bytecodes.send_2:
+                return False
+            method.set_inline_cache(idx, TrivialFieldWriteNode(target._field_idx))
+            method.set_bytecode(idx, Bytecodes.q_self_field_write)
+            return True
+        return False
+
+    def _mark_generic_class(self, clazz, universe):
+        for inv in self._own_invokables(clazz):
+            self._mark_generic_method(inv, universe)
+
+    def _mark_generic_method(self, method, universe):
+        from som.vmobjects.method_bc import BcAbstractMethod
+
+        if not isinstance(method, BcAbstractMethod):
+            return
+        for lit in method.get_literals():
+            if lit.is_invokable():
+                self._mark_generic_method(lit, universe)
+        holder = method.get_holder()
+        if holder is None:
+            return
+        holder_name = holder.get_name().get_embedded_string()
+        sig_name = method.get_signature().get_embedded_string()
+        for idx, ordinal in compute_send_ordinals(method).items():
+            selector = method.get_constant(idx)
+            selector_name = selector.get_embedded_string()
+            if pgo.is_marked_generic(holder_name, sig_name, selector_name, ordinal):
+                if method.get_inline_cache(idx) is None:
+                    method.set_inline_cache(idx, GenericDispatchNode(selector, universe))
+                    self.generic_sites += 1
+
     def stats(self):
-        return "static-send: candidates=%d bound=%d unbound=%d" % (
-            self.candidates, self.bound, self.unbound)
+        result = "static-send: candidates=%d bound=%d unbound=%d inlined_sites=%d" % (
+            self.candidates, self.bound, self.unbound, self.inlined)
+        if send_place_is_pgo():
+            result += "\npgo: generic_sites=%d" % self.generic_sites
+        return result

@@ -10,6 +10,9 @@ from som.interpreter.ast.nodes.dispatch import (
     CachedDispatchNode,
     INLINE_CACHE_SIZE,
     GenericDispatchNode,
+    TrivialFieldReadNode,
+    TrivialFieldWriteNode,
+    TrivialLiteralNode,
 )
 from som.placement import send_place_is_jit
 from som.vm.profiler import _PROFILE, on_send, on_method_executed
@@ -824,6 +827,30 @@ def interpret(method, frame, max_stack_size):
                     current_universe,
                 )
             stack_ptr = dispatch_node.dispatch_n_bc(stack, stack_ptr, None)
+            current_bc_idx += LEN_ONE_ARG
+
+        elif bytecode == Bytecodes.q_self_literal:
+            node = method.get_inline_cache(current_bc_idx)
+            assert isinstance(node, TrivialLiteralNode)
+            stack[stack_ptr] = node.value
+            current_bc_idx += LEN_ONE_ARG
+
+        elif bytecode == Bytecodes.q_self_field_read:
+            node = method.get_inline_cache(current_bc_idx)
+            assert isinstance(node, TrivialFieldReadNode)
+            stack[stack_ptr] = stack[stack_ptr].get_field(node.field_idx)
+            current_bc_idx += LEN_ONE_ARG
+
+        elif bytecode == Bytecodes.q_self_field_write:
+            node = method.get_inline_cache(current_bc_idx)
+            assert isinstance(node, TrivialFieldWriteNode)
+            arg = stack[stack_ptr]
+            if we_are_jitted():
+                stack[stack_ptr] = None
+            stack_ptr -= 1
+            rcvr = stack[stack_ptr]
+            rcvr.set_field(node.field_idx, arg)
+            stack[stack_ptr] = rcvr
             current_bc_idx += LEN_ONE_ARG
 
         elif bytecode == Bytecodes.push_local:

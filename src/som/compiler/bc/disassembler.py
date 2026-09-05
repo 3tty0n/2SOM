@@ -184,6 +184,25 @@ def dump_bytecode(m, b, indent=""):
             + ", context "
             + str(m.get_bytecode(b + 2))
         )
+    elif bytecode == Bytecodes.q_self_literal:
+        error_println("(inline-cache literal)")
+    elif bytecode == Bytecodes.q_self_field_read or bytecode == Bytecodes.q_self_field_write:
+        from som.interpreter.ast.nodes.dispatch import (
+            TrivialFieldReadNode,
+            TrivialFieldWriteNode,
+        )
+
+        node = m.get_inline_cache(b)
+        field_idx = -1
+        if isinstance(node, TrivialFieldReadNode):
+            field_idx = node.field_idx
+        elif isinstance(node, TrivialFieldWriteNode):
+            field_idx = node.field_idx
+        if m.get_holder() and field_idx >= 0:
+            field_name = str(m.get_holder().get_instance_field_name(field_idx))
+        else:
+            field_name = "?"
+        error_println("(inline-cache) field: " + field_name)
     elif bytecode == Bytecodes.return_non_local:
         error_println("context: " + str(m.get_bytecode(b + 1)))
     elif is_one_of(bytecode, JUMP_BYTECODES):
