@@ -1,3 +1,5 @@
+from rlib import jit
+
 from som.interpreter.send import lookup_and_send_3
 from som.vm.symbols import symbol_for
 
@@ -97,6 +99,53 @@ class CachedDispatchNode(_AbstractDispatchNode):
 
     def dispatch_n_bc(self, stack, stack_ptr, _rcvr):
         return self._cached_method.invoke_n(stack, stack_ptr)
+
+
+class BoundaryDispatchNode(CachedDispatchNode):
+    """
+    Same as CachedDispatchNode, but the JIT must not trace into the
+    cached method: the callee gets its own trace/compilation unit.
+    """
+
+    def dispatch_1(self, rcvr):
+        return _boundary_invoke_1(self._cached_method, rcvr)
+
+    def dispatch_2(self, rcvr, arg):
+        return _boundary_invoke_2(self._cached_method, rcvr, arg)
+
+    def dispatch_3(self, rcvr, arg1, arg2):
+        return _boundary_invoke_3(self._cached_method, rcvr, arg1, arg2)
+
+    def dispatch_args(self, rcvr, args):
+        return _boundary_invoke_args(self._cached_method, rcvr, args)
+
+    def dispatch_n_bc(self, stack, stack_ptr, _rcvr):
+        return _boundary_invoke_n(self._cached_method, stack, stack_ptr)
+
+
+@jit.dont_look_inside
+def _boundary_invoke_1(method, rcvr):
+    return method.invoke_1(rcvr)
+
+
+@jit.dont_look_inside
+def _boundary_invoke_2(method, rcvr, arg):
+    return method.invoke_2(rcvr, arg)
+
+
+@jit.dont_look_inside
+def _boundary_invoke_3(method, rcvr, arg1, arg2):
+    return method.invoke_3(rcvr, arg1, arg2)
+
+
+@jit.dont_look_inside
+def _boundary_invoke_args(method, rcvr, args):
+    return method.invoke_args(rcvr, args)
+
+
+@jit.dont_look_inside
+def _boundary_invoke_n(method, stack, stack_ptr):
+    return method.invoke_n(stack, stack_ptr)
 
 
 class TrivialFieldReadNode(_AbstractDispatchNode):

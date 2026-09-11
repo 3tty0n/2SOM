@@ -1,4 +1,5 @@
 from som.interpreter.ast.nodes.dispatch import (
+    BoundaryDispatchNode,
     CachedDispatchNode,
     GenericDispatchNode,
     TrivialFieldReadNode,
@@ -7,7 +8,7 @@ from som.interpreter.ast.nodes.dispatch import (
 )
 from som.interpreter.bc.bytecodes import Bytecodes, compute_send_ordinals
 from som.placement import send_place_is_aot, send_place_is_pgo
-from som.vm import pgo, send_inline
+from som.vm import boundary, pgo, send_inline
 from som.vmobjects.method_trivial import FieldRead, FieldWrite, LiteralReturn
 
 
@@ -64,6 +65,7 @@ class StaticSendBinder(object):
         self.unbound = 0
         self.inlined = 0
         self.generic_sites = 0
+        self.boundary_sites = 0
 
     def class_loaded(self, universe, clazz):
         if clazz is None or not (send_place_is_aot() or send_place_is_pgo()):
@@ -142,7 +144,10 @@ class StaticSendBinder(object):
             ):
                 self.inlined += 1
             else:
-                method.set_inline_cache(idx, CachedDispatchNode(None, target, None))
+                if method.is_boundary_site(idx):
+                    method.set_inline_cache(idx, BoundaryDispatchNode(None, target, None))
+                else:
+                    method.set_inline_cache(idx, CachedDispatchNode(None, target, None))
                 method.set_bytecode(idx, quick)
             sites = self.sites.get(selector, None)
             if sites is None:
@@ -196,10 +201,14 @@ class StaticSendBinder(object):
                 if method.get_inline_cache(idx) is None:
                     method.set_inline_cache(idx, GenericDispatchNode(selector, universe))
                     self.generic_sites += 1
+            if boundary.is_boundary(holder_name, sig_name, selector_name, ordinal):
+                method.mark_boundary_site(idx)
+                self.boundary_sites += 1
 
     def stats(self):
         result = "static-send: candidates=%d bound=%d unbound=%d inlined_sites=%d" % (
             self.candidates, self.bound, self.unbound, self.inlined)
         if send_place_is_pgo():
-            result += "\npgo: generic_sites=%d" % self.generic_sites
+            result += "\npgo: generic_sites=%d boundary_sites=%d" % (
+                self.generic_sites, self.boundary_sites)
         return result

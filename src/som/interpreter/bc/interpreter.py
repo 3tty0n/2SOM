@@ -7,6 +7,7 @@ from som.interpreter.ast.frame import (
     get_inner_as_context,
 )
 from som.interpreter.ast.nodes.dispatch import (
+    BoundaryDispatchNode,
     CachedDispatchNode,
     INLINE_CACHE_SIZE,
     GenericDispatchNode,
@@ -924,9 +925,14 @@ def _lookup(layout, method, bytecode_index, universe):
     if INLINE_CACHE_SIZE >= cache_size:
         invoke = layout.lookup_invokable(selector)
         if invoke is not None:
-            new_dispatch_node = CachedDispatchNode(
-                rcvr_class=layout, method=invoke, next_entry=first
-            )
+            if method.is_boundary_site(bytecode_index):
+                new_dispatch_node = BoundaryDispatchNode(
+                    rcvr_class=layout, method=invoke, next_entry=first
+                )
+            else:
+                new_dispatch_node = CachedDispatchNode(
+                    rcvr_class=layout, method=invoke, next_entry=first
+                )
             method.set_inline_cache(bytecode_index, new_dispatch_node)
             return new_dispatch_node
 

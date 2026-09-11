@@ -76,6 +76,7 @@ class BcAbstractMethod(AbstractMethod):
         if self_send_sites is None:
             self_send_sites = []
         self._self_send_sites = self_send_sites
+        self._boundary_sites = {}
 
         # Set the number of bytecodes in this method
         self._bytecodes = ["\x00"] * num_bytecodes
@@ -159,6 +160,12 @@ class BcAbstractMethod(AbstractMethod):
 
     def get_self_send_sites(self):
         return self._self_send_sites
+
+    def mark_boundary_site(self, bytecode_index):
+        self._boundary_sites[bytecode_index] = True
+
+    def is_boundary_site(self, bytecode_index):
+        return bytecode_index in self._boundary_sites
 
     def get_literals(self):
         return self._literals
