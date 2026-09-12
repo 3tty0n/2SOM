@@ -63,7 +63,7 @@ class Universe(object):
         "double_class",
         "double_layout?",
         "_globals",
-        "start_time",
+        "start_time?",
         "_object_system_initialized",
     ]
 
@@ -101,6 +101,8 @@ class Universe(object):
         self.classpath = None
         self.start_time = time.time()  # a float of the time in seconds
         self._object_system_initialized = False
+        self._system_object = None
+        self.prebuilt_classes = 0
 
     def reset(self, avoid_exit):
         self.__init__(avoid_exit)  # pylint: disable=unnecessary-dunder-call
@@ -131,6 +133,7 @@ class Universe(object):
         return invokable.invoke_1(clazz)
 
     def interpret(self, arguments):
+        self.start_time = time.time()
         # Check for command line switches
         arguments = self.handle_arguments(arguments)
 
@@ -145,7 +148,10 @@ class Universe(object):
         initialize = self.system_class.lookup_invokable(symbol_for("initialize:"))
         result = initialize.invoke_2(system_object, arguments_array)
         if os.environ.get("SOM_SEND_STATS") == "1":
-            error_println(self.static_sends.stats())
+            error_println(
+                self.static_sends.stats()
+                + " prebuilt_classes=%d" % self.prebuilt_classes
+            )
         return result
 
     def handle_arguments(self, arguments):
@@ -176,7 +182,7 @@ class Universe(object):
                 remaining_args.append(arguments[i])
             i += 1
 
-        if not got_classpath:
+        if not got_classpath and self.classpath is None:
             # Get the default class path of the appropriate size
             self.classpath = self._default_classpath()
 
@@ -220,6 +226,8 @@ class Universe(object):
         self.exit(0)
 
     def _initialize_object_system(self):
+        if self._object_system_initialized:
+            return self._system_object
         # Allocate the Metaclass classes
         self.metaclass_class = self.new_metaclass_class()
 
@@ -320,6 +328,7 @@ class Universe(object):
         self.block_layouts = [c.get_layout_for_instances() for c in self.block_classes]
 
         self._object_system_initialized = True
+        self._system_object = system_object
         return system_object
 
     def is_object_system_initialized(self):

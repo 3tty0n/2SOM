@@ -18,6 +18,12 @@ som-bc-jit:	core-lib/.git
 som-bc-jit-send-aot: core-lib/.git
 	SOM_SEND_PLACE=aot SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) --batch -Ojit src/main_rpython.py
 
+som-bc-jit-send-aot-prebuilt: core-lib/.git
+	SOM_SEND_PLACE=aot SOM_INTERP=BC \
+	  SOM_PREBUILT_CP="Smalltalk:Examples/Benchmarks:../benchmarks/Pipeline:../benchmarks/Actors:../benchmarks/Database:../benchmarks/Index:Examples/Benchmarks/Richards:Examples/Benchmarks/DeltaBlue:Examples/Benchmarks/Json" \
+	  SOM_PREBUILT_CLASSES="BenchmarkHarness,Pipeline,Actors,Richards,DeltaBlue,Json" \
+	  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) --batch -Ojit src/main_rpython.py
+
 som-bc-jit-send-jit: core-lib/.git
 	SOM_SEND_PLACE=jit SOM_INTERP=BC  PYTHONPATH=$(PYTHONPATH):$(PYPY_DIR) $(RPYTHON) --batch -Ojit src/main_rpython.py
 
