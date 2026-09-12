@@ -15,7 +15,7 @@ from som.interpreter.ast.nodes.dispatch import (
     TrivialFieldWriteNode,
     TrivialLiteralNode,
 )
-from som.placement import send_place_is_jit
+from som.placement import send_place_is_aot, send_place_is_jit, send_place_is_pgo
 from som.vm.profiler import _PROFILE, on_send, on_method_executed
 from som.interpreter.bc.bytecodes import (
     LEN_NO_ARGS,
@@ -831,27 +831,30 @@ def interpret(method, frame, max_stack_size):
             current_bc_idx += LEN_ONE_ARG
 
         elif bytecode == Bytecodes.q_self_literal:
-            node = method.get_inline_cache(current_bc_idx)
-            assert isinstance(node, TrivialLiteralNode)
-            stack[stack_ptr] = node.value
+            if send_place_is_aot() or send_place_is_pgo():
+                node = method.get_inline_cache(current_bc_idx)
+                assert isinstance(node, TrivialLiteralNode)
+                stack[stack_ptr] = node.value
             current_bc_idx += LEN_ONE_ARG
 
         elif bytecode == Bytecodes.q_self_field_read:
-            node = method.get_inline_cache(current_bc_idx)
-            assert isinstance(node, TrivialFieldReadNode)
-            stack[stack_ptr] = stack[stack_ptr].get_field(node.field_idx)
+            if send_place_is_aot() or send_place_is_pgo():
+                node = method.get_inline_cache(current_bc_idx)
+                assert isinstance(node, TrivialFieldReadNode)
+                stack[stack_ptr] = stack[stack_ptr].get_field(node.field_idx)
             current_bc_idx += LEN_ONE_ARG
 
         elif bytecode == Bytecodes.q_self_field_write:
-            node = method.get_inline_cache(current_bc_idx)
-            assert isinstance(node, TrivialFieldWriteNode)
-            arg = stack[stack_ptr]
-            if we_are_jitted():
-                stack[stack_ptr] = None
-            stack_ptr -= 1
-            rcvr = stack[stack_ptr]
-            rcvr.set_field(node.field_idx, arg)
-            stack[stack_ptr] = rcvr
+            if send_place_is_aot() or send_place_is_pgo():
+                node = method.get_inline_cache(current_bc_idx)
+                assert isinstance(node, TrivialFieldWriteNode)
+                arg = stack[stack_ptr]
+                if we_are_jitted():
+                    stack[stack_ptr] = None
+                stack_ptr -= 1
+                rcvr = stack[stack_ptr]
+                rcvr.set_field(node.field_idx, arg)
+                stack[stack_ptr] = rcvr
             current_bc_idx += LEN_ONE_ARG
 
         elif bytecode == Bytecodes.push_local:
@@ -904,20 +907,16 @@ def _lookup(layout, method, bytecode_index, universe):
             method.set_inline_cache(bytecode_index, generic)
         return generic
     cache = first = method.get_inline_cache(bytecode_index)
+    cache_size = 0
     while cache is not None:
         if cache.expected_layout is layout:
             return cache
         cache = cache.next_entry
+        cache_size += 1
 
     # this is the generic dispatch node
     if first and first.expected_layout is None:
         return first
-
-    # get size of cache
-    cache_size = 0
-    while cache is not None:
-        cache = cache.next_entry
-        cache_size += 1
 
     # read the selector only now when we will actually need it
     selector = method.get_constant(bytecode_index)

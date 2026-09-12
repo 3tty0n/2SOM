@@ -1,6 +1,7 @@
 from som.compiler.bc.bytecode_generator import compute_offset
 from som.vm.current import current_universe
 from som.vm.universe import error_print, error_println
+from som.placement import send_place_is_aot, send_place_is_pgo
 from som.interpreter.bc.bytecodes import (
     bytecode_as_str,
     bytecode_length,
@@ -187,17 +188,18 @@ def dump_bytecode(m, b, indent=""):
     elif bytecode == Bytecodes.q_self_literal:
         error_println("(inline-cache literal)")
     elif bytecode == Bytecodes.q_self_field_read or bytecode == Bytecodes.q_self_field_write:
-        from som.interpreter.ast.nodes.dispatch import (
-            TrivialFieldReadNode,
-            TrivialFieldWriteNode,
-        )
-
-        node = m.get_inline_cache(b)
         field_idx = -1
-        if isinstance(node, TrivialFieldReadNode):
-            field_idx = node.field_idx
-        elif isinstance(node, TrivialFieldWriteNode):
-            field_idx = node.field_idx
+        if send_place_is_aot() or send_place_is_pgo():
+            from som.interpreter.ast.nodes.dispatch import (
+                TrivialFieldReadNode,
+                TrivialFieldWriteNode,
+            )
+
+            node = m.get_inline_cache(b)
+            if isinstance(node, TrivialFieldReadNode):
+                field_idx = node.field_idx
+            elif isinstance(node, TrivialFieldWriteNode):
+                field_idx = node.field_idx
         if m.get_holder() and field_idx >= 0:
             field_name = str(m.get_holder().get_instance_field_name(field_idx))
         else:
