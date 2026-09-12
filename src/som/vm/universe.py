@@ -21,8 +21,6 @@ from som.vm.static_send import StaticSendBinder
 from som.vm import profiler
 from som.vm.profiler import _PROFILE
 
-_SEND_STATS = os.getenv("SOM_SEND_STATS", "") == "1"
-
 from som.compiler.sourcecode_compiler import (
     compile_class_from_file,
     compile_class_from_string,
@@ -146,7 +144,7 @@ class Universe(object):
         arguments_array = self.new_array_with_strings(arguments)
         initialize = self.system_class.lookup_invokable(symbol_for("initialize:"))
         result = initialize.invoke_2(system_object, arguments_array)
-        if _SEND_STATS:
+        if os.environ.get("SOM_SEND_STATS") == "1":
             error_println(self.static_sends.stats())
         return result
 

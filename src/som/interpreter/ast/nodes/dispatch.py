@@ -123,6 +123,40 @@ class BoundaryDispatchNode(CachedDispatchNode):
         return _boundary_invoke_n(self._cached_method, stack, stack_ptr)
 
 
+class GenericBoundaryDispatchNode(GenericDispatchNode):
+    def dispatch_1(self, rcvr):
+        method = rcvr.get_object_layout(self.universe).lookup_invokable(self._selector)
+        if method is not None:
+            return _boundary_invoke_1(method, rcvr)
+        return self._send_dnu(rcvr, [])
+
+    def dispatch_2(self, rcvr, arg):
+        method = rcvr.get_object_layout(self.universe).lookup_invokable(self._selector)
+        if method is not None:
+            return _boundary_invoke_2(method, rcvr, arg)
+        return self._send_dnu(rcvr, [arg])
+
+    def dispatch_3(self, rcvr, arg1, arg2):
+        method = rcvr.get_object_layout(self.universe).lookup_invokable(self._selector)
+        if method is not None:
+            return _boundary_invoke_3(method, rcvr, arg1, arg2)
+        return self._send_dnu(rcvr, [arg1, arg2])
+
+    def dispatch_args(self, rcvr, args):
+        method = rcvr.get_object_layout(self.universe).lookup_invokable(self._selector)
+        if method is not None:
+            return _boundary_invoke_args(method, rcvr, args)
+        return self._send_dnu(rcvr, args)
+
+    def dispatch_n_bc(self, stack, stack_ptr, rcvr):
+        method = rcvr.get_object_layout(self.universe).lookup_invokable(self._selector)
+        if method is not None:
+            return _boundary_invoke_n(method, stack, stack_ptr)
+        from som.interpreter.bc.interpreter import send_does_not_understand
+
+        return send_does_not_understand(rcvr, self._selector, stack, stack_ptr)
+
+
 @jit.dont_look_inside
 def _boundary_invoke_1(method, rcvr):
     return method.invoke_1(rcvr)
